@@ -428,7 +428,14 @@ impl Client {
             .to_string();
 
         let session = match url.scheme() {
-            "https" => web_transport_quinn::Session::connect(connection, url.clone()).await?,
+            "https" => {
+                // Build a ConnectRequest with the MoQT version as the WebTransport subprotocol.
+                // Per draft-15+, version negotiation uses ALPN (raw QUIC) or
+                // wt-available-protocols (WebTransport) instead of CLIENT_SETUP versions.
+                let request = web_transport_quinn::proto::ConnectRequest::new(url.clone())
+                    .with_protocol(std::str::from_utf8(moq_transport::setup::ALPN).unwrap());
+                web_transport_quinn::Session::connect(connection, request).await?
+            }
             "moqt" => web_transport_quinn::Session::raw(connection, url.clone(), web_transport_quinn::proto::ConnectResponse::default()),
             _ => unreachable!(),
         };
