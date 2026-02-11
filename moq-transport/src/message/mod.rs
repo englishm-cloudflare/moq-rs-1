@@ -157,6 +157,23 @@ macro_rules! message_types {
 }
 
 // Each message is prefixed with the given VarInt type.
+//
+// TODO(draft-16 compliance): The following issues remain vs the draft-16 spec:
+//
+// 1. TrackStatusOk (0x0e) does not exist in draft-16. Type 0x0e is NAMESPACE_DONE
+//    (Section 9.23). TRACK_STATUS is answered with REQUEST_OK (0x07), not a
+//    separate message. TrackStatusOk should be replaced with NamespaceDone.
+//
+// 2. Namespace (0x08) message is missing. The relay sends NAMESPACE on the
+//    bidirectional stream opened by SUBSCRIBE_NAMESPACE (Section 9.21).
+//
+// 3. REQUEST_OK (0x07) handling is stubbed — currently logs "Not implemented"
+//    and drops the message. It needs to be handled for PUBLISH_NAMESPACE and
+//    TRACK_STATUS responses.
+//
+// 4. The message length field is read but ignored (_len on line ~82). This means
+//    any field-level decode mismatch silently corrupts subsequent messages.
+//
 message_types! {
     // NOTE: Setup messages are in another module.
     // SetupClient = 0x20
@@ -185,11 +202,12 @@ message_types! {
 
     // TRACK_STATUS family, sent by subscriber
     TrackStatus = 0xd,
-    // TRACK_STATUS family, sent by publisher
+    // TODO: This should be NamespaceDone per draft-16 (see note above)
     TrackStatusOk = 0xe,
 
     // NAMESPACE family, sent by subscriber
     SubscribeNamespace = 0x11,
+    // TODO: Add Namespace = 0x8 (see note above)
 
     // FETCH family, sent by subscriber
     Fetch = 0x16,
