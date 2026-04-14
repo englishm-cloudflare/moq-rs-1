@@ -337,9 +337,12 @@ You can also pass extra arguments directly:
 |------|-------------|
 | `--mlog-dir <path>` | Directory to write mlog files to |
 | `--mlog-serve` | Serve mlog files over HTTPS at `/mlog/<cid>` |
+| `--mlog-http-url <url>` | POST mlog events to this HTTP endpoint |
+| `--mlog-http-header <K: V>` | Custom header for the HTTP sink, repeatable (e.g. `--mlog-http-header "x-hdx-table: myproject.events"`) |
+| `--mlog-http-format <fmt>` | HTTP batch format: `json-array` (default), `ndjson`, or `json-seq` |
 | `--dev` | Required for `--mlog-serve` (enables the HTTP endpoint; already set by `./dev/relay`) |
 
-Both `--mlog-dir` and `--mlog-serve` can be used independently: you can write mlog files to disk without serving them over HTTP, or you might only need the HTTP endpoint in some setups.
+File and HTTP sinks can be active simultaneously. `--mlog-dir` writes JSON-SEQ files to disk, `--mlog-http-url` ships batched events to a remote endpoint. Either or both can be used independently.
 
 ## Troubleshooting
 

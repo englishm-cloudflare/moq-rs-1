@@ -4,6 +4,7 @@
 mod api_coordinator;
 mod file_coordinator;
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::{net, path::PathBuf};
 
@@ -61,6 +62,23 @@ pub struct Cli {
     /// Requires --dev to enable the web server. Only serves files by exact CID - no index.
     #[arg(long)]
     pub mlog_serve: bool,
+
+    /// POST mlog events to this HTTP endpoint.
+    /// Events are batched and sent as JSON arrays. Can be used alongside --mlog-dir.
+    #[arg(long)]
+    pub mlog_http_url: Option<String>,
+
+    /// Custom header for HTTP mlog sink, in "Key: Value" format.
+    /// Can be specified multiple times (e.g. --mlog-http-header "x-hdx-table: myproject.moq_events").
+    #[arg(long)]
+    pub mlog_http_header: Vec<String>,
+
+    /// Serialization format for HTTP mlog batches.
+    /// json-array (default): standard JSON array, application/json
+    /// ndjson: newline-delimited JSON, application/x-ndjson
+    /// json-seq: JSON Text Sequences (RFC 7464), application/qlog+json-seq
+    #[arg(long, default_value = "json-array")]
+    pub mlog_http_format: moq_transport::mlog::HttpBatchFormat,
 
     /// Path to the shared coordinator file for multi-relay coordination.
     /// Multiple relay instances can share namespace/track registration via this file.
@@ -162,6 +180,22 @@ async fn main() -> anyhow::Result<()> {
         None
     };
 
+    // Parse HTTP mlog headers from "Key: Value" format
+    let mlog_http_headers: HashMap<String, String> = cli
+        .mlog_http_header
+        .iter()
+        .filter_map(|h| match h.split_once(':') {
+            Some((key, value)) => Some((key.trim().to_string(), value.trim().to_string())),
+            None => {
+                tracing::warn!(
+                    header = %h,
+                    "mlog: ignoring malformed --mlog-http-header (expected 'Key: Value')"
+                );
+                None
+            }
+        })
+        .collect();
+
     // Build the relay URL from the node or bind address
     let relay_url = cli
         .node
@@ -187,6 +221,9 @@ async fn main() -> anyhow::Result<()> {
         endpoints: vec![],
         qlog_dir: qlog_dir_for_relay,
         mlog_dir: mlog_dir_for_relay,
+        mlog_http_url: cli.mlog_http_url,
+        mlog_http_headers,
+        mlog_http_format: cli.mlog_http_format,
         node: cli.node,
         announce: cli.announce,
         coordinator,

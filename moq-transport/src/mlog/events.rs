@@ -25,14 +25,13 @@
 use serde::Serialize;
 use serde_json::{json, Value as JsonValue};
 
-use crate::coding::Encode;
 use crate::{coding, data, message, setup};
 
 /// Hex-encode a byte slice (lowercase).
 fn hex_encode(bytes: &[u8]) -> String {
+    use std::fmt::Write;
     let mut s = String::with_capacity(bytes.len() * 2);
     for b in bytes {
-        use std::fmt::Write;
         let _ = write!(s, "{:02x}", b);
     }
     s
@@ -245,14 +244,38 @@ fn params_to_qlog(kvps: &[coding::KeyValuePair]) -> JsonValue {
     json!(kvps.iter().map(param_to_qlog).collect::<Vec<_>>())
 }
 
-/// Compute the wire byte length of extension headers by encoding to a temp buffer.
-/// This matches the MoQT framing field that precedes extension headers on the wire.
-fn ext_headers_wire_len(headers: &data::ExtensionHeaders) -> u64 {
-    let mut tmp = bytes::BytesMut::new();
-    for kvp in &headers.0 {
-        let _ = kvp.encode(&mut tmp);
+/// Byte length of a QUIC variable-length integer encoding.
+fn varint_wire_len(v: u64) -> u64 {
+    if v < 64 {
+        1
+    } else if v < 16384 {
+        2
+    } else if v < 1_073_741_824 {
+        4
+    } else {
+        8
     }
-    tmp.len() as u64
+}
+
+/// Compute the wire byte length of extension headers analytically.
+/// This matches the MoQT framing field that precedes extension headers on the wire.
+/// Avoids allocating a temporary buffer on every call.
+fn ext_headers_wire_len(headers: &data::ExtensionHeaders) -> u64 {
+    headers
+        .0
+        .iter()
+        .map(|kvp| {
+            let key_len = varint_wire_len(kvp.key);
+            match &kvp.value {
+                // Even key: varint(key) + varint(value)
+                coding::Value::IntValue(v) => key_len + varint_wire_len(*v),
+                // Odd key: varint(key) + varint(byte_len) + bytes
+                coding::Value::BytesValue(bytes) => {
+                    key_len + varint_wire_len(bytes.len() as u64) + bytes.len() as u64
+                }
+            }
+        })
+        .sum()
 }
 
 /// Convert extension headers to qlog [*MOQTExtensionHeader] array.

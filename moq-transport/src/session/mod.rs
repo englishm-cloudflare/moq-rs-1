@@ -33,7 +33,7 @@ use crate::message::Message;
 use crate::mlog;
 use crate::watch::Queue;
 use crate::{message, setup};
-use std::path::PathBuf;
+use crate::mlog::MlogConfig;
 
 /// The transport protocol negotiated for this MoQT connection.
 ///
@@ -536,7 +536,7 @@ impl Session {
     /// with no path component.
     pub async fn connect(
         session: web_transport::Session,
-        mlog_path: Option<PathBuf>,
+        mlog_config: Option<MlogConfig>,
         transport: Transport,
     ) -> Result<(Session, Publisher, Subscriber), SessionError> {
         // Auto-extract path from the session URL.
@@ -544,11 +544,13 @@ impl Session {
         // where the path is always part of the URI regardless of transport.
         let url_path = session.url().path();
         let path = Self::normalize_connection_path(url_path)?;
-        let mlog = mlog_path.and_then(|path| {
-            mlog::MlogWriter::new(path)
-                .map_err(|e| tracing::warn!("Failed to create mlog: {}", e))
-                .ok()
-        });
+        let mlog = mlog_config
+            .filter(|c| c.has_sinks())
+            .and_then(|config| {
+                mlog::MlogWriter::new(config)
+                    .map_err(|e| tracing::warn!("Failed to create mlog: {}", e))
+                    .ok()
+            });
         let control = session.open_bi().await?;
         let mut sender = Writer::new(control.0);
         let mut recver = Reader::new(control.1);
@@ -605,14 +607,16 @@ impl Session {
     /// MOQT control messaging.  Performs SETUP messaging and version negotiation.
     pub async fn accept(
         session: web_transport::Session,
-        mlog_path: Option<PathBuf>,
+        mlog_config: Option<MlogConfig>,
         transport: Transport,
     ) -> Result<(Session, Option<Publisher>, Option<Subscriber>), SessionError> {
-        let mut mlog = mlog_path.and_then(|path| {
-            mlog::MlogWriter::new(path)
-                .map_err(|e| tracing::warn!("Failed to create mlog: {}", e))
-                .ok()
-        });
+        let mut mlog = mlog_config
+            .filter(|c| c.has_sinks())
+            .and_then(|config| {
+                mlog::MlogWriter::new(config)
+                    .map_err(|e| tracing::warn!("Failed to create mlog: {}", e))
+                    .ok()
+            });
         let control = session.accept_bi().await?;
         let mut sender = Writer::new(control.0);
         let mut recver = Reader::new(control.1);

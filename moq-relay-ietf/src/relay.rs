@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2024-2026 Cloudflare Inc., Luke Curley, Mike English and contributors
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use std::{future::Future, net, path::PathBuf, pin::Pin, sync::Arc};
+use std::{collections::HashMap, future::Future, net, path::PathBuf, pin::Pin, sync::Arc};
 
 use anyhow::Context;
 
@@ -47,6 +47,15 @@ pub struct RelayConfig {
     /// Directory to write mlog files (one per connection)
     pub mlog_dir: Option<PathBuf>,
 
+    /// HTTP endpoint to POST mlog events to (batched as JSON arrays).
+    pub mlog_http_url: Option<String>,
+
+    /// Custom headers for the HTTP mlog sink (e.g. x-hdx-table, x-hdx-token).
+    pub mlog_http_headers: HashMap<String, String>,
+
+    /// Serialization format for HTTP mlog batches.
+    pub mlog_http_format: moq_transport::mlog::HttpBatchFormat,
+
     /// Forward all announcements to the (optional) URL.
     pub announce: Option<Url>,
 
@@ -63,6 +72,10 @@ pub struct Relay {
     quic_endpoints: Vec<Endpoint>,
     announce_url: Option<Url>,
     mlog_dir: Option<PathBuf>,
+    mlog_http_url: Option<String>,
+    mlog_http_headers: HashMap<String, String>,
+    mlog_http_format: moq_transport::mlog::HttpBatchFormat,
+    mlog_http_client: Option<Arc<moq_transport::mlog::HttpClient>>,
     locals: Locals,
     remotes: Option<(RemotesProducer, RemotesConsumer)>,
     coordinator: Arc<dyn Coordinator>,
@@ -115,10 +128,31 @@ impl Relay {
         }
         .produce();
 
+        // Build a shared reqwest::Client once for the HTTP mlog sink.
+        // All connections share this client for connection pooling and TLS reuse.
+        let mlog_http_client = if let Some(ref url) = config.mlog_http_url {
+            let safe_url = moq_transport::mlog::sanitize_url_for_logging(url);
+            tracing::info!(
+                url = %safe_url,
+                headers = config.mlog_http_headers.len(),
+                "mlog HTTP sink enabled"
+            );
+            Some(Arc::new(
+                moq_transport::mlog::HttpSink::build_client(&config.mlog_http_headers)
+                    .context("failed to build mlog HTTP client")?,
+            ))
+        } else {
+            None
+        };
+
         Ok(Self {
             quic_endpoints: endpoints,
             announce_url: config.announce,
             mlog_dir: config.mlog_dir,
+            mlog_http_url: config.mlog_http_url,
+            mlog_http_headers: config.mlog_http_headers,
+            mlog_http_format: config.mlog_http_format,
+            mlog_http_client,
             locals,
             remotes: Some(remotes),
             coordinator: config.coordinator,
@@ -241,9 +275,25 @@ impl Relay {
 
                     metrics::counter!("moq_relay_connections_total").increment(1);
 
-                    // Construct mlog path from connection ID if mlog directory is configured
-                    let mlog_path = self.mlog_dir.as_ref()
-                        .map(|dir| dir.join(format!("{}_server.mlog", connection_id)));
+                    // Build MlogConfig from connection ID and configured sinks
+                    let mlog_config = {
+                        let file_path = self.mlog_dir.as_ref()
+                            .map(|dir| dir.join(format!("{}_server.mlog", connection_id)));
+                        let config = moq_transport::mlog::MlogConfig {
+                            file_path,
+                            http_url: self.mlog_http_url.clone(),
+                            // When a shared client is provided, headers are already baked
+                            // into its default_headers — no need to deep-copy per connection.
+                            http_headers: if self.mlog_http_client.is_some() {
+                                HashMap::new()
+                            } else {
+                                self.mlog_http_headers.clone()
+                            },
+                            http_format: self.mlog_http_format,
+                            http_client: self.mlog_http_client.clone(),
+                        };
+                        if config.has_sinks() { Some(config) } else { None }
+                    };
 
                     let locals = self.locals.clone();
                     let remotes = remotes.clone();
@@ -260,7 +310,7 @@ impl Relay {
                         let raw_conn = conn.clone();
 
                         // Create the MoQ session over the connection (setup handshake etc)
-                        let (session, publisher, subscriber) = match moq_transport::session::Session::accept(conn, mlog_path, transport).await {
+                        let (session, publisher, subscriber) = match moq_transport::session::Session::accept(conn, mlog_config, transport).await {
                             Ok(session) => session,
                             Err(err) => {
                                 tracing::warn!(error = %err, "failed to accept MoQ session: {}", err);
