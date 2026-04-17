@@ -1,0 +1,24 @@
+# SPDX-FileCopyrightText: 2026 Cloudflare Inc. and contributors
+# SPDX-License-Identifier: MIT OR Apache-2.0
+
+[package]
+name = "moq-dump"
+description = "Raw diagnostic subscriber — dumps MoQ track data to disk for inspection"
+authors = ["moq-rs contributors"]
+repository = "https://github.com/cloudflare/moq-rs"
+license = "MIT OR Apache-2.0"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+moq-transport = { path = "../moq-transport", version = "0.14" }
+moq-native-ietf = { path = "../moq-native-ietf", version = "0.8" }
+
+url = "2"
+tokio = { version = "1", features = ["full"] }
+clap = { version = "4", features = ["derive"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { version = "1", features = ["backtrace"] }
+hex = "0.4"
+serde_json = "1"

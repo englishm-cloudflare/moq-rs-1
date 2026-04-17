@@ -1283,6 +1283,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "moq-dump"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "hex",
+ "moq-native-ietf",
+ "moq-transport",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+]
+
+[[package]]
 name = "moq-native-ietf"
 version = "0.8.0"
 dependencies = [
