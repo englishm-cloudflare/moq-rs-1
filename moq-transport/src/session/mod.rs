@@ -499,7 +499,7 @@ impl Session {
 
     /// Create an outbound/client QUIC connection.
     ///
-    /// Opens the bidirectional control stream, sends SETUP with
+    /// Opens a unidirectional control stream, sends SETUP with
     /// parameters only (version is agreed via ALPN), and waits for SETUP.
     ///
     /// For native `moqt://` connections the PATH and AUTHORITY parameters are
@@ -530,9 +530,9 @@ impl Session {
                 .ok()
         });
 
-        let control = session.open_bi().await?;
-        let mut sender = Writer::new(control.0);
-        let mut recver = Reader::new(control.1);
+        // Open our unidirectional control send stream.
+        let send_stream = session.open_uni().await?;
+        let mut sender = Writer::new(send_stream);
 
         let mut params = KeyValuePairs::default();
 
@@ -582,6 +582,10 @@ impl Session {
         );
         sender.encode(&client).await?;
 
+
+        // Accept the peer's unidirectional control stream.
+        let recv_stream = session.accept_uni().await?;
+        let mut recver = Reader::new(recv_stream);
         let server: setup::Setup = recver.decode().await?;
         tracing::debug!(
             target: "moq_transport::control",
@@ -602,7 +606,7 @@ impl Session {
 
     /// Accept an inbound server connection.
     ///
-    /// Waits for the bidirectional control stream, decodes SETUP,
+    /// Opens a unidirectional control stream and accepts the peer.s, decodes SETUP,
     /// sends SETUP with parameters only.  Version is already agreed
     /// via ALPN before this is called.
     pub async fn accept(
@@ -626,9 +630,13 @@ impl Session {
                 .ok()
         });
 
-        let control = session.accept_bi().await?;
-        let mut sender = Writer::new(control.0);
-        let mut recver = Reader::new(control.1);
+        // Open our unidirectional control send stream.
+        let send_stream = session.open_uni().await?;
+        let mut sender = Writer::new(send_stream);
+
+        // Accept the peer's unidirectional control stream.
+        let recv_stream = session.accept_uni().await?;
+        let mut recver = Reader::new(recv_stream);
 
         let client: setup::Setup = recver.decode().await?;
         tracing::debug!(
