@@ -1,0 +1,21 @@
+moq-transport/src/message/mod.rs
+  s_4c4a968eb4be4b::t_88457085344569 249-250
+  s_4c4a968eb4be4b::t_595c7a760de797 411
+  s_4c4a968eb4be4b::t_7dbecd17c24c40 508
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "cbf1c762cd4dc206e8ec2a16a4b547a0cfbb2159",
+  "prompts": {},
+  "sessions": {
+    "s_4c4a968eb4be4b": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_06d4e9750ffe04ZgS6M6jDTufW",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
