@@ -1,0 +1,25 @@
+moq-test-client/src/scenarios.rs
+  s_c40d535ca820da::t_e158260db5e637 18-19,21
+  s_c40d535ca820da::t_f4bd324c6d0a73 478-911
+moq-test-client/src/main.rs
+  s_c40d535ca820da::t_7dc118408523cf 86-93
+  s_c40d535ca820da::t_64bd38a734310e 107-110
+  s_c40d535ca820da::t_5b6ae175dec21c 181-190
+  s_c40d535ca820da::t_524b3e9e81b2be 124-127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "73177cca2e6692c23ff56b7571e65b75b5992429",
+  "prompts": {},
+  "sessions": {
+    "s_c40d535ca820da": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_055d90009ffeAfOD2vdH7p5OzN",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
