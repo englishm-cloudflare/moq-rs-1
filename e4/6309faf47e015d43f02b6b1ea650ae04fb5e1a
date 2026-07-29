@@ -1,0 +1,29 @@
+moq-relay-ietf/src/bin/moq-relay-ietf/main.rs
+  s_047fa143bea7fa::t_0e38b59bb2be2c 100-101,103
+moq-test-client/src/main.rs
+  s_047fa143bea7fa::t_703b50e8810153 232-234,236
+moq-clock-ietf/src/main.rs
+  s_047fa143bea7fa::t_0e17229681034e 25-27,29
+moq-sub/src/main.rs
+  s_047fa143bea7fa::t_ec4dec445ff331 19-21,23
+moq-pub/src/main.rs
+  s_047fa143bea7fa::t_abdbe6e6357700 60-61,63
+moq-api/src/main.rs
+  s_047fa143bea7fa::t_27d6a27601c55a 14-15,17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "e46309faf47e015d43f02b6b1ea650ae04fb5e1a",
+  "prompts": {},
+  "sessions": {
+    "s_047fa143bea7fa": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_0512cb844ffehcSW3My2OmSsQ5",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
