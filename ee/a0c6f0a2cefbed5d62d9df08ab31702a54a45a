@@ -1,0 +1,38 @@
+moq-transport/src/coding/track_namespace.rs
+  s_6a5f5f94bcba2f::t_1ce5a8f2af67db 345
+  s_6a5f5f94bcba2f::t_476ce86f3f9e39 496
+  s_6a5f5f94bcba2f::t_021d6053fb2f7a 30-37,39-40,42
+  s_6a5f5f94bcba2f::t_bd1cf5ea0c21f7 277-280,282
+  s_6a5f5f94bcba2f::t_65494abf9617c5 430-433,435
+  s_6a5f5f94bcba2f::t_fbef32384d3bd8 908-951
+moq-relay-ietf/src/local.rs
+  s_6a5f5f94bcba2f::t_a6e78fd2f13c35 106,545
+moq-relay-ietf/src/producer.rs
+  s_6a5f5f94bcba2f::t_a6e78fd2f13c35 242
+moq-relay-ietf/src/remote.rs
+  s_6a5f5f94bcba2f::t_a6e78fd2f13c35 925,950
+moq-relay-ietf/src/consumer.rs
+  s_6a5f5f94bcba2f::t_a6e78fd2f13c35 389,395
+moq-transport/src/serve/tracks.rs
+  s_6a5f5f94bcba2f::t_a6e78fd2f13c35 151,223,232,252,266
+moq-transport/src/serve/track.rs
+  s_6a5f5f94bcba2f::t_a6e78fd2f13c35 97,120,141,156,166
+moq-relay-ietf/src/upstream_namespaces.rs
+  s_6a5f5f94bcba2f::t_a6e78fd2f13c35 521,614
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "eea0c6f0a2cefbed5d62d9df08ab31702a54a45a",
+  "prompts": {},
+  "sessions": {
+    "s_6a5f5f94bcba2f": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_04f92d8f1ffetrjEhvd1raDYnK",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
