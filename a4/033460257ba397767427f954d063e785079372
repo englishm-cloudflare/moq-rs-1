@@ -1,0 +1,19 @@
+moq-relay-ietf/src/consumer.rs
+  s_33ecd77f7f82eb::t_2271d52c35de07 185-206
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "a4033460257ba397767427f954d063e785079372",
+  "prompts": {},
+  "sessions": {
+    "s_33ecd77f7f82eb": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_04c0e280bffe1NlWbZWbjR7QcF",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
