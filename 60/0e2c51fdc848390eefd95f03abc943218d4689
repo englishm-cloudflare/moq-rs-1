@@ -1,0 +1,23 @@
+moq-relay-ietf/src/metrics.rs
+  s_3135355230822b::t_7e5568b57756cd 34-36,119-130
+moq-relay-ietf/src/producer.rs
+  s_3135355230822b::t_41334403040754 308-314,325-327
+moq-relay-ietf/src/upstream_namespaces.rs
+  s_3135355230822b::t_c953f3a1c4a006 86-96,175-182
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "600e2c51fdc848390eefd95f03abc943218d4689",
+  "prompts": {},
+  "sessions": {
+    "s_3135355230822b": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_0501ab314ffeoB5v7bqct0mGu6",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
