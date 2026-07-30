@@ -1,0 +1,54 @@
+moq-relay-ietf/src/metrics.rs
+  s_33ecd77f7f82eb::t_042b684b161d39 103-106
+moq-transport/src/serve/tracks.rs
+  s_33ecd77f7f82eb::t_2bdae170b10f50 76-77,79-81,85
+  s_33ecd77f7f82eb::t_4117fe73551e86 200-207
+  s_33ecd77f7f82eb::t_abb6f9a812e879 297,302,311-316,318
+  s_33ecd77f7f82eb::t_1029a9dc136df9 709-783,785-883
+  s_33ecd77f7f82eb::t_28395946b27f4a 357,362,368-372,384-386,396-404,409,417-418,426-427,443,449-463,474-480,489
+  s_33ecd77f7f82eb::t_6a5d8579af8a94 17,19-22,24
+  s_33ecd77f7f82eb::t_7c379da9503695 45-59,61,72-75,78,82-84,86,89-199,208-230
+  s_33ecd77f7f82eb::t_a0f0038c082832 259-267,278-282
+  s_33ecd77f7f82eb::t_c677195f20547f 344
+  s_33ecd77f7f82eb::t_c0dd368c0d8e8f 87,525,530,535,538-539,556,571,575,602,607,613,642,646,651-652,656,678,682,687-688,693,784
+moq-transport/src/serve/interest.rs
+  s_33ecd77f7f82eb::t_0fc562c056a0d2 1-263
+moq-relay-ietf/src/consumer.rs
+  s_33ecd77f7f82eb::t_63db1e27fbfc58 178,183,188-211,214
+  s_33ecd77f7f82eb::t_d226e29439fab0 5,10,27-30,47,51-60,99-100,215
+moq-relay-ietf/src/producer.rs
+  s_33ecd77f7f82eb::t_bc3090cf7c3695 135,142-146
+  s_33ecd77f7f82eb::t_3bea636073898f 113,120-123
+moq-relay-ietf/Cargo.toml
+  s_33ecd77f7f82eb::t_8f4225822dab7b 73-77
+moq-relay-ietf/src/bin/moq-relay-ietf/main.rs
+  s_33ecd77f7f82eb::t_e00f866fb88511 8,41-46,191-203
+moq-relay-ietf/src/relay.rs
+  s_33ecd77f7f82eb::t_7eac0fd3c210fc 4,10,67,72-85,125-126,135,148,198-207,347
+moq-relay-ietf/src/remote.rs
+  s_33ecd77f7f82eb::t_33784f135aaf0d 8,12-14,28-38,50-53,63,67-76,88,175,250-295,323-324,333,408,433,460-464,504-513,519,535-543,546-548,551,561,574-667
+moq-sub/src/media.rs
+  s_33ecd77f7f82eb::t_4d98f59f12eba4 114-121,157
+moq-transport/Cargo.toml
+  s_33ecd77f7f82eb::t_b49c951974c128 24-25,36-40
+moq-transport/src/serve/mod.rs
+  s_33ecd77f7f82eb::t_4ce17fbd2d5337 7,16
+moq-transport/src/session/publisher.rs
+  s_33ecd77f7f82eb::t_8ac67a97cbe99c 176,180-183,201-204
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "e0a0ff2a9a386f710a416295e03651aed3915a8d",
+  "prompts": {},
+  "sessions": {
+    "s_33ecd77f7f82eb": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_04c0e280bffe1NlWbZWbjR7QcF",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
