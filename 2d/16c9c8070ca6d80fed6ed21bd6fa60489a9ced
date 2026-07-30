@@ -1,0 +1,25 @@
+moq-relay-ietf/src/consumer.rs
+  s_70385bddb536d3::t_a5410f14391f7c 259,275-278,280-283,291-294
+moq-relay-ietf/src/local.rs
+  s_70385bddb536d3::t_28301dbe7e7820 13,64-151,222-246,560-561,563,709-711,717,736,742-746,759-764,771,774-781,793-797,808-812,855,861-865,1008,1208,1212,1214,1217-1220,1236,1240-1241,1267-1272,1347,1351,1602-1772,1786,1789-1791,1835,1844-1848,1856,1859-1861,1893,1900,1924,1930,1953,1961,1973,1978
+moq-relay-ietf/src/metrics.rs
+  s_70385bddb536d3::t_4368d5cf22f586 32,54,112-115,171
+moq-relay-ietf/src/producer.rs
+  s_70385bddb536d3::t_a410ebddd60faf 20,158,163,168-191,245-259,554-565
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "2d16c9c8070ca6d80fed6ed21bd6fa60489a9ced",
+  "prompts": {},
+  "sessions": {
+    "s_70385bddb536d3": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_04be6ade6ffeDRaCaSODLaYLjt",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
