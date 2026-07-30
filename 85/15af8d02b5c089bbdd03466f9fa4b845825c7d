@@ -1,0 +1,21 @@
+moq-relay-ietf/src/producer.rs
+  s_70385bddb536d3::t_aebc37ddf90300 190-209
+  s_70385bddb536d3::t_1403aef1e72372 277-278,282,284-287
+  s_70385bddb536d3::t_a26a772c7d7d50 34-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "8515af8d02b5c089bbdd03466f9fa4b845825c7d",
+  "prompts": {},
+  "sessions": {
+    "s_70385bddb536d3": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_04be6ade6ffeDRaCaSODLaYLjt",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
