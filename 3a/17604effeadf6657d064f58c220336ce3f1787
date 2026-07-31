@@ -1,0 +1,19 @@
+README.md
+  s_bb5d3ee9c1ca4b::t_ce5fadadda366f 13-16,41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "3a17604effeadf6657d064f58c220336ce3f1787",
+  "prompts": {},
+  "sessions": {
+    "s_bb5d3ee9c1ca4b": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_046048e9bffeHZTvE70qoCffHd",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
