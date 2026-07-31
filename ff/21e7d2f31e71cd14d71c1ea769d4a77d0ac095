@@ -1,0 +1,24 @@
+deploy/MLOG_SETUP.md
+  s_bb5d3ee9c1ca4b::t_30b90afb06931d 159
+  s_bb5d3ee9c1ca4b::t_11389645748203 109
+  s_bb5d3ee9c1ca4b::t_f4abc433c40390 35
+  s_bb5d3ee9c1ca4b::t_20f9a8135cc9a0 61
+  s_bb5d3ee9c1ca4b::t_4c00edc5ae6eea 9,15
+  s_bb5d3ee9c1ca4b::t_69a04682cc4352 179,182
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "ff21e7d2f31e71cd14d71c1ea769d4a77d0ac095",
+  "prompts": {},
+  "sessions": {
+    "s_bb5d3ee9c1ca4b": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_046048e9bffeHZTvE70qoCffHd",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
