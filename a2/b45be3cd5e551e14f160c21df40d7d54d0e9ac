@@ -1,0 +1,19 @@
+moq-test-client/src/strict.rs
+  s_c40d535ca820da::t_1f4597a88e047b 645-652,654,656-657,662,665-666,668-694
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "a2b45be3cd5e551e14f160c21df40d7d54d0e9ac",
+  "prompts": {},
+  "sessions": {
+    "s_c40d535ca820da": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_055d90009ffeAfOD2vdH7p5OzN",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
