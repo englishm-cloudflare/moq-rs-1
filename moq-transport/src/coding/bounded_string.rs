@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024-2026 Cloudflare Inc., Luke Curley, Mike English and contributors
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 use super::{Decode, DecodeError, Encode, EncodeError};
 
 macro_rules! bounded_string {
@@ -83,7 +86,7 @@ mod tests {
     fn decode_too_large() {
         let mut data: Vec<u8> = vec![0x00; 1025]; // Create a vector with 1025 bytes
                                                   // Set first 2 bytes as length of 1025 as a VarInt
-        data[0] = 0x44;
+        data[0] = 0x84;
         data[1] = 0x01;
         let mut buf: Bytes = data.into();
         let decoded = ReasonPhrase::decode(&mut buf);

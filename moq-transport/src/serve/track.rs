@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2024-2026 Cloudflare Inc., Luke Curley, Mike English and contributors
+// SPDX-FileCopyrightText: 2023-2024 Luke Curley and contributors
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 //! A track is a collection of semi-reliable and semi-ordered streams, split into a [Writer] and [Reader] handle.
 //!
 //! A [Writer] creates streams with a sequence number and priority.
@@ -18,7 +22,7 @@ use super::{
     Datagrams, DatagramsReader, DatagramsWriter, ObjectsWriter, ServeError, Stream, StreamReader,
     StreamWriter, Subgroups, SubgroupsReader, SubgroupsWriter,
 };
-use crate::coding::{Location, TrackNamespace};
+use crate::coding::{Location, TrackName, TrackNamespace};
 use paste::paste;
 use std::{ops::Deref, sync::Arc};
 
@@ -26,12 +30,15 @@ use std::{ops::Deref, sync::Arc};
 #[derive(Debug, Clone, PartialEq)]
 pub struct Track {
     pub namespace: TrackNamespace,
-    pub name: String,
+    pub name: TrackName,
 }
 
 impl Track {
-    pub fn new(namespace: TrackNamespace, name: String) -> Self {
-        Self { namespace, name }
+    pub fn new(namespace: TrackNamespace, name: impl Into<TrackName>) -> Self {
+        Self {
+            namespace,
+            name: name.into(),
+        }
     }
 
     pub fn produce(self) -> (TrackWriter, TrackReader) {
@@ -85,7 +92,14 @@ impl TrackWriter {
         .produce();
 
         // Lock state to modify it
-        let mut state = self.state.lock_mut().ok_or(ServeError::Cancel)?;
+        let mut state = self.state.lock_mut().ok_or_else(|| {
+            tracing::debug!(
+                namespace = %self.info.namespace,
+                track = %self.info.name,
+                "track state dropped (Cancel) in stream()"
+            );
+            ServeError::Cancel
+        })?;
 
         // Set the Stream mode to TrackReaderMode::Stream
         state.reader_mode = Some(reader.into());
@@ -101,7 +115,14 @@ impl TrackWriter {
         .produce();
 
         // Lock state to modify it
-        let mut state = self.state.lock_mut().ok_or(ServeError::Cancel)?;
+        let mut state = self.state.lock_mut().ok_or_else(|| {
+            tracing::debug!(
+                namespace = %self.info.namespace,
+                track = %self.info.name,
+                "track state dropped (Cancel) in subgroups()"
+            );
+            ServeError::Cancel
+        })?;
 
         // Set the Stream mode to TrackReaderMode::Subgroups
         state.reader_mode = Some(reader.into());
@@ -115,7 +136,14 @@ impl TrackWriter {
         .produce();
 
         // Lock state to modify it
-        let mut state = self.state.lock_mut().ok_or(ServeError::Cancel)?;
+        let mut state = self.state.lock_mut().ok_or_else(|| {
+            tracing::debug!(
+                namespace = %self.info.namespace,
+                track = %self.info.name,
+                "track state dropped (Cancel) in datagrams()"
+            );
+            ServeError::Cancel
+        })?;
 
         // Set the Stream mode to TrackReaderMode::Datagrams
         state.reader_mode = Some(reader.into());
@@ -124,10 +152,23 @@ impl TrackWriter {
 
     /// Close the track with an error.
     pub fn close(self, err: ServeError) -> Result<(), ServeError> {
+        tracing::debug!(
+            namespace = %self.info.namespace,
+            track = %self.info.name,
+            error = %err,
+            "track closing"
+        );
         let state = self.state.lock();
         state.closed.clone()?;
 
-        let mut state = state.into_mut().ok_or(ServeError::Cancel)?;
+        let mut state = state.into_mut().ok_or_else(|| {
+            tracing::debug!(
+                namespace = %self.info.namespace,
+                track = %self.info.name,
+                "track state already dropped during close"
+            );
+            ServeError::Cancel
+        })?;
         state.closed = Err(err);
         Ok(())
     }
@@ -174,9 +215,10 @@ impl TrackReader {
 
     // Returns the largest group/sequence
     pub fn largest_location(&self) -> Option<Location> {
-        // We don't even know the mode yet.
-        // TODO populate from SUBSCRIBE_OK
-        None
+        let mode = self.state.lock().reader_mode.clone();
+        mode.as_ref()
+            .and_then(|mode| mode.latest())
+            .map(|(group_id, object_id)| Location::new(group_id, object_id))
     }
 
     /// Wait until the track is closed, returning the closing error.
@@ -193,6 +235,30 @@ impl TrackReader {
             }
             .await;
         }
+    }
+
+    /// Check if the track is closed or the writer has been dropped.
+    /// This is used to detect stale cached TrackReaders that should not be reused.
+    pub fn is_closed(&self) -> bool {
+        let state = self.state.lock();
+
+        if state.closed.is_err() {
+            return true;
+        }
+
+        // Clone the mode out before dropping the TrackState lock to avoid
+        // nested lock deadlocks (mode readers hold their own State locks).
+        if let Some(mode) = state.reader_mode.clone() {
+            // Mode has been set — the TrackWriter was consumed during the
+            // Track→Subgroups/Stream/Datagrams transition. Liveness is now
+            // determined by whether the mode-level writer is still alive.
+            drop(state);
+            return mode.is_closed();
+        }
+
+        // No mode set yet — check if the writer was abandoned before
+        // transitioning to a specific mode.
+        state.modified().is_none()
     }
 }
 
@@ -222,6 +288,12 @@ macro_rules! track_readers {
 				pub fn latest(&self) -> Option<(u64, u64)> {
 					match self {
 						$(Self::$name(reader) => reader.latest(),)*
+					}
+				}
+
+				pub fn is_closed(&self) -> bool {
+					match self {
+						$(Self::$name(reader) => reader.is_closed(),)*
 					}
 				}
 			}
@@ -256,3 +328,161 @@ macro_rules! track_writers {
 }
 
 track_writers!(Track, Stream, Subgroups, Objects, Datagrams,);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::coding::TrackNamespace;
+    use crate::serve::Subgroup;
+
+    #[test]
+    fn test_is_closed_false_before_mode_set() {
+        let track = Track::new(TrackNamespace::from_utf8_path("ns"), "t".to_string());
+        let (_writer, reader) = track.produce();
+        assert!(!reader.is_closed());
+    }
+
+    #[test]
+    fn test_is_closed_true_when_writer_dropped_without_mode() {
+        let track = Track::new(TrackNamespace::from_utf8_path("ns"), "t".to_string());
+        let (writer, reader) = track.produce();
+        drop(writer);
+        assert!(reader.is_closed());
+    }
+
+    #[test]
+    fn test_is_closed_true_when_explicitly_closed() {
+        let track = Track::new(TrackNamespace::from_utf8_path("ns"), "t".to_string());
+        let (writer, reader) = track.produce();
+        writer.close(ServeError::Cancel).unwrap();
+        assert!(reader.is_closed());
+    }
+
+    #[test]
+    fn test_is_closed_false_after_subgroups_transition_while_writer_alive() {
+        let track = Track::new(TrackNamespace::from_utf8_path("ns"), "t".to_string());
+        let (writer, reader) = track.produce();
+
+        let _subgroups_writer = writer
+            .subgroups()
+            .expect("subgroups transition should succeed");
+
+        assert!(
+            !reader.is_closed(),
+            "track should NOT be closed while SubgroupsWriter is alive"
+        );
+    }
+
+    #[test]
+    fn test_is_closed_true_after_subgroups_writer_dropped() {
+        let track = Track::new(TrackNamespace::from_utf8_path("ns"), "t".to_string());
+        let (writer, reader) = track.produce();
+
+        let subgroups_writer = writer
+            .subgroups()
+            .expect("subgroups transition should succeed");
+        drop(subgroups_writer);
+
+        assert!(
+            reader.is_closed(),
+            "track should be closed after SubgroupsWriter is dropped"
+        );
+    }
+
+    #[test]
+    fn test_is_closed_true_after_subgroups_writer_explicitly_closed() {
+        let track = Track::new(TrackNamespace::from_utf8_path("ns"), "t".to_string());
+        let (writer, reader) = track.produce();
+
+        let subgroups_writer = writer
+            .subgroups()
+            .expect("subgroups transition should succeed");
+        subgroups_writer.close(ServeError::Cancel).unwrap();
+
+        assert!(
+            reader.is_closed(),
+            "track should be closed after SubgroupsWriter is explicitly closed"
+        );
+    }
+
+    #[test]
+    fn test_is_closed_false_after_stream_transition_while_writer_alive() {
+        let track = Track::new(TrackNamespace::from_utf8_path("ns"), "t".to_string());
+        let (writer, reader) = track.produce();
+
+        let _stream_writer = writer.stream(0).expect("stream transition should succeed");
+
+        assert!(
+            !reader.is_closed(),
+            "track should NOT be closed while StreamWriter is alive"
+        );
+    }
+
+    #[test]
+    fn test_is_closed_true_after_stream_writer_dropped() {
+        let track = Track::new(TrackNamespace::from_utf8_path("ns"), "t".to_string());
+        let (writer, reader) = track.produce();
+
+        let stream_writer = writer.stream(0).expect("stream transition should succeed");
+        drop(stream_writer);
+
+        assert!(
+            reader.is_closed(),
+            "track should be closed after StreamWriter is dropped"
+        );
+    }
+
+    #[test]
+    fn test_is_closed_false_after_datagrams_transition_while_writer_alive() {
+        let track = Track::new(TrackNamespace::from_utf8_path("ns"), "t".to_string());
+        let (writer, reader) = track.produce();
+
+        let _datagrams_writer = writer
+            .datagrams()
+            .expect("datagrams transition should succeed");
+
+        assert!(
+            !reader.is_closed(),
+            "track should NOT be closed while DatagramsWriter is alive"
+        );
+    }
+
+    #[test]
+    fn test_is_closed_true_after_datagrams_writer_dropped() {
+        let track = Track::new(TrackNamespace::from_utf8_path("ns"), "t".to_string());
+        let (writer, reader) = track.produce();
+
+        let datagrams_writer = writer
+            .datagrams()
+            .expect("datagrams transition should succeed");
+        drop(datagrams_writer);
+
+        assert!(
+            reader.is_closed(),
+            "track should be closed after DatagramsWriter is dropped"
+        );
+    }
+
+    #[test]
+    fn test_is_closed_false_while_subgroups_actively_writing() {
+        let track = Track::new(TrackNamespace::from_utf8_path("ns"), "t".to_string());
+        let (writer, reader) = track.produce();
+
+        let mut subgroups_writer = writer
+            .subgroups()
+            .expect("subgroups transition should succeed");
+
+        let _subgroup_writer = subgroups_writer
+            .create(Subgroup {
+                group_id: 0,
+                subgroup_id: 0,
+                priority: 0,
+            })
+            .expect("create subgroup should succeed");
+
+        assert!(
+            !reader.is_closed(),
+            "track should NOT be closed while actively writing subgroups"
+        );
+    }
+}

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024-2026 Cloudflare Inc., Luke Curley, Mike English and contributors
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 use super::{Decode, DecodeError, Encode, EncodeError};
 use core::hash::{Hash, Hasher};
 
@@ -208,7 +211,7 @@ mod tests {
     fn decode_tuplefield_too_large() {
         let mut data: Vec<u8> = vec![0x00; TupleField::MAX_VALUE_SIZE + 1]; // Create a vector with 256 bytes
                                                                             // 4097 encoded as VarInt
-        data[0] = 0x50;
+        data[0] = 0x90;
         data[1] = 0x01;
         let mut buf: Bytes = data.into();
         let decoded = TupleField::decode(&mut buf);

@@ -1,6 +1,9 @@
+// SPDX-FileCopyrightText: 2024-2026 Cloudflare Inc., Luke Curley, Mike English and contributors
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 use std::{
     collections::HashSet,
-    fmt,
+    fmt::{self, Write as _},
     fs::File,
     io::BufWriter,
     net::{self, IpAddr},
@@ -11,7 +14,11 @@ use std::{
 
 use anyhow::Context;
 use clap::Parser;
+use socket2::{Domain, Protocol, Socket, Type};
 use url::Url;
+
+use moq_transport::session::Transport;
+use quinn::VarInt;
 
 use crate::tls;
 
@@ -24,7 +31,7 @@ use futures::FutureExt;
 pub enum AddressFamily {
     Ipv4,
     Ipv6,
-    /// IPv6 with dual-stack support (Linux)
+    /// IPv6 with dual-stack support (IPV6_V6ONLY=false)
     Ipv6DualStack,
 }
 
@@ -43,6 +50,90 @@ impl fmt::Display for AddressFamily {
     }
 }
 
+/// Bind a UDP socket, attempting dual-stack if the address is IPv6.
+///
+/// For IPv6 addresses, attempts to set `IPV6_V6ONLY = false` to enable
+/// dual-stack operation (accepting both IPv4 and IPv6 traffic). This is
+/// the default on Linux but must be explicitly requested on macOS/Windows.
+///
+/// Returns `(socket, is_dual_stack)` where `is_dual_stack` indicates
+/// whether the socket can handle both IPv4 and IPv6 destinations.
+fn bind_smart(addr: net::SocketAddr) -> anyhow::Result<(net::UdpSocket, bool)> {
+    let domain = if addr.is_ipv6() {
+        Domain::IPV6
+    } else {
+        Domain::IPV4
+    };
+    let socket = Socket::new(domain, Type::DGRAM, Some(Protocol::UDP))
+        .context("failed to create UDP socket")?;
+
+    let mut is_dual_stack = false;
+
+    if addr.is_ipv6() {
+        match socket.set_only_v6(false) {
+            Ok(()) => {
+                is_dual_stack = true;
+                tracing::debug!(addr = %addr, "IPv6 dual-stack enabled (IPV6_V6ONLY=false)");
+            }
+            Err(e) => {
+                tracing::warn!(
+                    addr = %addr,
+                    error = %e,
+                    "Could not enable dual-stack on IPv6 socket; \
+                     IPv4-only destinations may be unreachable"
+                );
+            }
+        }
+    }
+
+    socket
+        .bind(&addr.into())
+        .with_context(|| format!("failed to bind UDP socket to {}", addr))?;
+
+    let local_addr = match socket.local_addr() {
+        Ok(a) => a
+            .as_socket()
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "<non-IP address>".to_string()),
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to get local address after successful bind");
+            "<unknown>".to_string()
+        }
+    };
+
+    tracing::info!(
+        bind = %addr,
+        local = %local_addr,
+        dual_stack = is_dual_stack,
+        "UDP socket bound"
+    );
+
+    Ok((socket.into(), is_dual_stack))
+}
+
+/// HTTP/3 `H3_NO_ERROR` ([RFC 9114] §8.1): the H3 layer completed normally, the
+/// request was simply refused.
+///
+/// Wire hygiene rather than a behaviour fix — §8 already requires an unknown
+/// code to be read as H3_NO_ERROR, so a conformant peer read the previous 0
+/// the same way. `H3_REQUEST_REJECTED` would be wrong here: §4.1.1 reserves it
+/// for requests the server did not process, and this one was answered with 406.
+///
+/// [RFC 9114]: https://www.rfc-editor.org/rfc/rfc9114.html#section-8.1
+const H3_NO_ERROR: u32 = 0x100;
+
+/// How long a rejected WebTransport CONNECT is given to reach the peer before
+/// the connection is closed underneath it.
+const REJECT_FLUSH_TIMEOUT: time::Duration = time::Duration::from_millis(250);
+
+/// Caps the offered protocol identifiers logged when a CONNECT is rejected.
+///
+/// The list is peer-controlled on a pre-authentication path. H3 bounds the
+/// whole header block to 64 KiB, but that is still ~104 KiB of decoded text in
+/// one entry, so both the entry count and each entry's length are capped.
+const MAX_LOGGED_PROTOCOLS: usize = 16;
+const MAX_LOGGED_PROTOCOL_LEN: usize = 64;
+
 /// Build a TransportConfig with our standard settings
 ///
 /// This is used both for the base endpoint config and when creating
@@ -59,7 +150,11 @@ fn build_transport_config() -> quinn::TransportConfig {
 #[derive(Parser, Clone)]
 pub struct Args {
     /// Listen for UDP packets on the given address.
-    #[arg(long, default_value = "[::]:0")]
+    ///
+    /// Defaults to [::]:0 (IPv6 with dual-stack). If the default IPv6 bind
+    /// fails, automatically falls back to 0.0.0.0 (IPv4-only) with a warning.
+    /// Explicitly provided IPv6 addresses will not fall back.
+    #[arg(long, default_value = Args::DEFAULT_BIND)]
     pub bind: net::SocketAddr,
 
     /// Directory to write qlog files (one per connection)
@@ -73,7 +168,7 @@ pub struct Args {
 impl Default for Args {
     fn default() -> Self {
         Self {
-            bind: "[::]:0".parse().unwrap(),
+            bind: Self::DEFAULT_BIND.parse().unwrap(),
             qlog_dir: None,
             tls: Default::default(),
         }
@@ -81,31 +176,86 @@ impl Default for Args {
 }
 
 impl Args {
+    /// The default bind address used when `--bind` is not explicitly provided.
+    const DEFAULT_BIND: &str = "[::]:0";
+
     pub fn load(&self) -> anyhow::Result<Config> {
         let tls = self.tls.load()?;
-        Ok(Config::new(self.bind, self.qlog_dir.clone(), tls))
+
+        match Config::new(self.bind, self.qlog_dir.clone(), tls.clone()) {
+            Ok(config) => Ok(config),
+            Err(e) if self.bind.to_string() == Self::DEFAULT_BIND => {
+                // IPv6 default bind failed -- try falling back to IPv4.
+                // Only do this for the default; if the user explicitly
+                // requested an IPv6 address, respect that and propagate
+                // the error.
+                let fallback = net::SocketAddr::new(
+                    net::IpAddr::V4(net::Ipv4Addr::UNSPECIFIED),
+                    self.bind.port(),
+                );
+                tracing::warn!(
+                    requested = %self.bind,
+                    fallback = %fallback,
+                    error = %e,
+                    "IPv6 bind failed, falling back to IPv4"
+                );
+                Config::new(fallback, self.qlog_dir.clone(), tls).with_context(|| {
+                    format!("IPv4 fallback also failed (original IPv6 error: {})", e)
+                })
+            }
+            Err(e) => Err(e),
+        }
     }
 }
+
+/// A hook to wrap the endpoint's [`quinn::AsyncUdpSocket`] before it is handed
+/// to quinn.
+///
+/// This lets callers interpose custom socket behavior — for example,
+/// byte-counting for metrics — without this crate depending on the caller's
+/// instrumentation. The closure receives the runtime-wrapped socket and
+/// returns the socket quinn should actually use (typically the input wrapped
+/// in a decorator).
+///
+/// Construct one via [`Config::with_socket_wrapper`], which accepts any
+/// matching closure; this boxed alias is the stored form. `Box` (rather than
+/// `Arc`) is sufficient because `Config` is not `Clone` and the wrapper is
+/// invoked exactly once, during [`Endpoint::new`].
+pub type SocketWrapperFn = Box<
+    dyn Fn(Arc<dyn quinn::AsyncUdpSocket>) -> Arc<dyn quinn::AsyncUdpSocket>
+        + Send
+        + Sync
+        + 'static,
+>;
 
 pub struct Config {
     pub bind: Option<net::SocketAddr>,
     pub socket: net::UdpSocket,
+    pub is_dual_stack: bool,
     pub qlog_dir: Option<PathBuf>,
     pub tls: tls::Config,
     pub tags: HashSet<String>,
+    /// Optional hook to wrap the [`quinn::AsyncUdpSocket`] before endpoint
+    /// creation. Defaults to `None` (no wrapping). See [`SocketWrapperFn`].
+    pub socket_wrapper: Option<SocketWrapperFn>,
 }
 
 impl Config {
-    pub fn new(bind: net::SocketAddr, qlog_dir: Option<PathBuf>, tls: tls::Config) -> Self {
-        Self {
+    pub fn new(
+        bind: net::SocketAddr,
+        qlog_dir: Option<PathBuf>,
+        tls: tls::Config,
+    ) -> anyhow::Result<Self> {
+        let (socket, is_dual_stack) = bind_smart(bind)?;
+        Ok(Self {
             bind: Some(bind),
-            socket: net::UdpSocket::bind(bind)
-                .context("failed to bind socket")
-                .unwrap(),
+            socket,
+            is_dual_stack,
             qlog_dir,
             tls,
             tags: HashSet::new(),
-        }
+            socket_wrapper: None,
+        })
     }
 
     pub fn with_socket(
@@ -113,17 +263,40 @@ impl Config {
         qlog_dir: Option<PathBuf>,
         tls: tls::Config,
     ) -> Self {
+        // Probe the socket to detect dual-stack capability rather than assuming.
+        let is_dual_stack = socket.local_addr().is_ok_and(|addr| {
+            addr.is_ipv6() && {
+                let sock_ref = socket2::SockRef::from(&socket);
+                sock_ref.only_v6().map(|v6only| !v6only).unwrap_or(false)
+            }
+        });
+
         Self {
             bind: None,
             socket,
+            is_dual_stack,
             qlog_dir,
             tls,
             tags: HashSet::new(),
+            socket_wrapper: None,
         }
     }
 
     pub fn with_tag(mut self, tag: String) -> Self {
         self.tags.insert(tag);
+        self
+    }
+
+    /// Attach a closure that wraps the endpoint's [`quinn::AsyncUdpSocket`]
+    /// before it is handed to quinn. See [`SocketWrapperFn`].
+    pub fn with_socket_wrapper<F>(mut self, wrapper: F) -> Self
+    where
+        F: Fn(Arc<dyn quinn::AsyncUdpSocket>) -> Arc<dyn quinn::AsyncUdpSocket>
+            + Send
+            + Sync
+            + 'static,
+    {
+        self.socket_wrapper = Some(Box::new(wrapper));
         self
     }
 }
@@ -150,7 +323,7 @@ impl Endpoint {
             if !qlog_dir.is_dir() {
                 anyhow::bail!("qlog path is not a directory: {}", qlog_dir.display());
             }
-            log::info!("qlog output enabled: {}", qlog_dir.display());
+            tracing::info!("qlog output enabled: {}", qlog_dir.display());
         }
 
         // Build transport config with our standard settings
@@ -159,10 +332,11 @@ impl Endpoint {
         let mut server_config = None;
 
         if let Some(mut config) = config.tls.server {
-            config.alpn_protocols = vec![
-                web_transport_quinn::ALPN.to_vec(),
-                moq_transport::setup::ALPN.to_vec(),
-            ];
+            // Offer WebTransport ALPN plus all supported MoQT versions for raw QUIC.
+            config.alpn_protocols = vec![web_transport_quinn::ALPN.as_bytes().to_vec()];
+            for alpn in moq_transport::setup::SUPPORTED_ALPNS {
+                config.alpn_protocols.push(alpn.as_bytes().to_vec());
+            }
             config.key_log = Arc::new(rustls::KeyLogFile::new());
 
             let config: quinn::crypto::rustls::QuicServerConfig = config.try_into()?;
@@ -177,9 +351,26 @@ impl Endpoint {
         let endpoint_config = quinn::EndpointConfig::default();
         let socket = config.socket;
 
-        // Create the generic QUIC endpoint.
-        let quic = quinn::Endpoint::new(endpoint_config, server_config.clone(), socket, runtime)
-            .context("failed to create QUIC endpoint")?;
+        // Create the generic QUIC endpoint. When a socket wrapper is configured,
+        // wrap the std socket into quinn's AsyncUdpSocket and let the caller
+        // interpose (e.g. for byte-counting metrics) before quinn takes it.
+        let quic = match config.socket_wrapper {
+            Some(wrap) => {
+                let async_socket = runtime
+                    .wrap_udp_socket(socket)
+                    .context("failed to wrap UDP socket")?;
+                let wrapped = wrap(async_socket);
+                quinn::Endpoint::new_with_abstract_socket(
+                    endpoint_config,
+                    server_config.clone(),
+                    wrapped,
+                    runtime,
+                )
+                .context("failed to create QUIC endpoint")?
+            }
+            None => quinn::Endpoint::new(endpoint_config, server_config.clone(), socket, runtime)
+                .context("failed to create QUIC endpoint")?,
+        };
 
         let server = server_config.map(|base_server_config| Server {
             quic: quic.clone(),
@@ -192,6 +383,7 @@ impl Endpoint {
             quic,
             config: config.tls.client,
             transport,
+            is_dual_stack: config.is_dual_stack,
         };
 
         Ok(Self {
@@ -202,15 +394,47 @@ impl Endpoint {
     }
 }
 
+/// Metadata about a connection accepted by [`Server::accept`].
+///
+/// Returned alongside the [`web_transport::Session`] so the embedder can
+/// correlate logs (via [`ConnInfo::id`]) and classify the connection interface
+/// — public client vs internal relay peer — from the peer address and TLS SNI.
+#[derive(Debug, Clone)]
+pub struct ConnInfo {
+    /// Original destination connection ID (hex), used for qlog/mlog correlation.
+    pub id: String,
+
+    /// Negotiated application transport (WebTransport or raw QUIC).
+    pub transport: Transport,
+
+    /// Peer socket address.
+    pub remote_address: net::SocketAddr,
+
+    /// Local IP the peer connected to: the destination IP the peer's packets
+    /// targeted (the port is always our fixed listening port, so it is omitted).
+    ///
+    /// On a wildcard bind (`0.0.0.0` / `[::]`) this identifies which local
+    /// address/interface (e.g. an anycast VIP) actually received the
+    /// connection — something neither [`remote_address`](Self::remote_address)
+    /// nor the wildcard [`Server::local_addr`] can tell you. `None` when the
+    /// platform does not expose the destination address (see
+    /// `quinn::Connection::local_ip`).
+    pub local_ip: Option<IpAddr>,
+
+    /// TLS SNI server name sent by the peer, if any.
+    pub server_name: Option<String>,
+}
+
 pub struct Server {
     quic: quinn::Endpoint,
-    accept: FuturesUnordered<BoxFuture<'static, anyhow::Result<(web_transport::Session, String)>>>,
+    accept:
+        FuturesUnordered<BoxFuture<'static, anyhow::Result<(web_transport::Session, ConnInfo)>>>,
     qlog_dir: Option<Arc<PathBuf>>,
     base_server_config: Arc<quinn::ServerConfig>,
 }
 
 impl Server {
-    pub async fn accept(&mut self) -> Option<(web_transport::Session, String)> {
+    pub async fn accept(&mut self) -> Option<(web_transport::Session, ConnInfo)> {
         loop {
             tokio::select! {
                 res = self.quic.accept() => {
@@ -223,7 +447,7 @@ impl Server {
                     match res? {
                         Ok(result) => return Some(result),
                         Err(err) => {
-                            log::warn!("failed to accept QUIC connection: {}", err.root_cause());
+                            tracing::warn!("failed to accept QUIC connection: {}", err.root_cause());
                             continue;
                         }
                     }
@@ -236,7 +460,7 @@ impl Server {
         conn: quinn::Incoming,
         qlog_dir: Option<Arc<PathBuf>>,
         base_server_config: Arc<quinn::ServerConfig>,
-    ) -> anyhow::Result<(web_transport::Session, String)> {
+    ) -> anyhow::Result<(web_transport::Session, ConnInfo)> {
         // Capture the original destination connection ID BEFORE accepting
         // This is the actual QUIC CID that can be used for qlog/mlog correlation
         let orig_dst_cid = conn.orig_dst_cid();
@@ -262,7 +486,7 @@ impl Server {
             let mut server_config = (*base_server_config).clone();
             server_config.transport_config(Arc::new(transport));
 
-            log::debug!(
+            tracing::debug!(
                 "qlog enabled: cid={} path={}",
                 connection_id_hex,
                 qlog_path.display()
@@ -285,7 +509,7 @@ impl Server {
         let alpn = String::from_utf8_lossy(&alpn);
         let server_name = handshake.server_name.unwrap_or_default();
 
-        log::debug!(
+        tracing::debug!(
             "received QUIC handshake: cid={} ip={} alpn={} server={}",
             connection_id_hex,
             conn.remote_address(),
@@ -296,34 +520,152 @@ impl Server {
         // Wait for the QUIC connection to be established.
         let conn = conn.await.context("failed to establish QUIC connection")?;
 
-        log::debug!(
-            "established QUIC connection: cid={} stable_id={} ip={} alpn={} server={}",
+        // Capture the peer's socket address before `conn` is moved into the
+        // WebTransport/raw-QUIC session below. The relay uses this to classify
+        // the connection interface (public client vs internal relay peer).
+        let remote_address = conn.remote_address();
+
+        // The destination IP the peer targeted, which differs from the wildcard
+        // bind address on multi-homed / anycast hosts. `None` if the platform
+        // does not expose it.
+        let local_ip = conn.local_ip();
+
+        tracing::debug!(
+            "established QUIC connection: cid={} stable_id={} ip={} local_ip={:?} alpn={} server={}",
             connection_id_hex,
             conn.stable_id(),
-            conn.remote_address(),
+            remote_address,
+            local_ip,
             alpn,
             server_name,
         );
 
-        let session = match alpn.as_bytes() {
-            web_transport_quinn::ALPN => {
-                // Wait for the CONNECT request.
-                let request = web_transport_quinn::accept(conn)
-                    .await
-                    .context("failed to receive WebTransport request")?;
+        let alpn_bytes = alpn.as_bytes();
+        let (session, transport) = if alpn_bytes == web_transport_quinn::ALPN.as_bytes() {
+            // `Request::accept` takes the connection, so keep a handle for the
+            // rejection path: closing with a reason tells the peer why, which a
+            // bare drop does not.
+            let conn_for_reject = conn.clone();
 
-                // Accept the CONNECT request.
-                request
-                    .ok()
-                    .await
-                    .context("failed to respond to WebTransport request")?
-            }
-            // A bit of a hack to pretend like we're a WebTransport session
-            moq_transport::setup::ALPN => conn.into(),
-            _ => anyhow::bail!("unsupported ALPN: {}", alpn),
+            // Wait for the WebTransport CONNECT request (includes H3 SETTINGS exchange).
+            let request = web_transport_quinn::Request::accept(conn)
+                .await
+                .context("failed to receive WebTransport request")?;
+
+            // Negotiate the MoQT version from the client's offered protocols. Rejecting here
+            // rather than accepting without a protocol keeps a non-MoQT WebTransport client
+            // from getting a successful CONNECT only to fail later at MoQT SETUP.
+            //
+            // draft-18 §3.1.3 has the client put its MoQT protocol identifiers in
+            // WT-Available-Protocols; draft-ietf-webtrans-http3 §3.3 lets the server
+            // "reject the request if the client did not include a suitable protocol".
+            let selected = match moq_transport::setup::negotiate_version(&request.protocols) {
+                Some(selected) => selected,
+                None => {
+                    // `reject` consumes the request, so render the offer now,
+                    // bounded in both directions: the peer chooses how many
+                    // entries it sends and how long each one is.
+                    let offered = {
+                        let total = request.protocols.len();
+                        let shown: Vec<String> = request
+                            .protocols
+                            .iter()
+                            .take(MAX_LOGGED_PROTOCOLS)
+                            .map(|p| match p.char_indices().nth(MAX_LOGGED_PROTOCOL_LEN) {
+                                Some((cut, _)) => format!("{}…", &p[..cut]),
+                                None => p.clone(),
+                            })
+                            .collect();
+                        let mut rendered = format!("{shown:?}");
+                        if total > MAX_LOGGED_PROTOCOLS {
+                            let _ = write!(rendered, " (+{} more)", total - MAX_LOGGED_PROTOCOLS);
+                        }
+                        rendered
+                    };
+
+                    // Answer the CONNECT instead of dropping the connection, so the
+                    // peer learns why, and record what it offered: without this the
+                    // peer sees an abrupt close and the log names no cause.
+                    tracing::warn!(
+                        cid = %connection_id_hex,
+                        ip = %remote_address,
+                        offered = %offered,
+                        supported = ?moq_transport::setup::SUPPORTED_ALPNS,
+                        "rejecting WebTransport CONNECT: no mutually supported MoQT version in WT-Available-Protocols"
+                    );
+
+                    // 406: the client's offer could not be satisfied.
+                    if let Err(err) = request
+                        .reject(web_transport_quinn::http::StatusCode::NOT_ACCEPTABLE)
+                        .await
+                    {
+                        tracing::debug!(cid = %connection_id_hex, error = %err, "failed to reject WebTransport CONNECT");
+                    }
+
+                    // `reject` only queues the response, and both `close` and
+                    // dropping the connection stop sending immediately, which
+                    // would truncate it. Give the peer a bounded moment to read
+                    // the 406 and close, then close with a reason so its logs
+                    // name the cause rather than a truncated H3 exchange.
+                    if tokio::time::timeout(REJECT_FLUSH_TIMEOUT, conn_for_reject.closed())
+                        .await
+                        .is_err()
+                    {
+                        // H3_NO_ERROR: the H3 layer did its job and answered the
+                        // CONNECT; 0 is not a defined HTTP/3 error code.
+                        conn_for_reject.close(
+                            VarInt::from_u32(H3_NO_ERROR),
+                            b"no mutually supported MoQT version in WT-Available-Protocols",
+                        );
+                    }
+
+                    anyhow::bail!(
+                        "no mutually supported MoQT version in WT-Available-Protocols (offered: {}, supported: {:?})",
+                        offered,
+                        moq_transport::setup::SUPPORTED_ALPNS,
+                    );
+                }
+            };
+            let response =
+                web_transport_quinn::proto::ConnectResponse::OK.with_protocol(selected.to_string());
+
+            // Accept the CONNECT request.
+            let session = request
+                .respond(response)
+                .await
+                .context("failed to respond to WebTransport request")?;
+            (session, Transport::WebTransport)
+        } else if moq_transport::setup::SUPPORTED_ALPNS
+            .iter()
+            .any(|v| v.as_bytes() == alpn_bytes)
+        {
+            // Raw QUIC mode — create a "fake" WebTransport session with no H3 framing.
+            let request = url::Url::parse("moqt://localhost").unwrap();
+            let session = web_transport_quinn::Session::raw(
+                conn,
+                request,
+                web_transport_quinn::proto::ConnectResponse::default(),
+            );
+            (session, Transport::RawQuic)
+        } else {
+            anyhow::bail!(
+                "unsupported ALPN: {} (supported: {:?} or {})",
+                alpn,
+                moq_transport::setup::SUPPORTED_ALPNS,
+                web_transport_quinn::ALPN,
+            )
         };
 
-        Ok((session.into(), connection_id_hex))
+        let info = ConnInfo {
+            id: connection_id_hex,
+            transport,
+            remote_address,
+            local_ip,
+            // An empty SNI means the peer sent no server name.
+            server_name: (!server_name.is_empty()).then_some(server_name),
+        };
+
+        Ok((session.into(), info))
     }
 
     pub fn local_addr(&self) -> anyhow::Result<net::SocketAddr> {
@@ -338,6 +680,7 @@ pub struct Client {
     quic: quinn::Endpoint,
     config: rustls::ClientConfig,
     transport: Arc<quinn::TransportConfig>,
+    is_dual_stack: bool,
 }
 
 impl Client {
@@ -349,6 +692,9 @@ impl Client {
     }
 
     /// Returns the address family of the local QUIC socket.
+    ///
+    /// Uses the dual-stack state determined at bind time rather than
+    /// compile-time platform assumptions.
     pub fn address_family(&self) -> anyhow::Result<AddressFamily> {
         let local_addr = self
             .quic
@@ -357,7 +703,7 @@ impl Client {
 
         if local_addr.is_ipv4() {
             Ok(AddressFamily::Ipv4)
-        } else if cfg!(target_os = "linux") {
+        } else if self.is_dual_stack {
             Ok(AddressFamily::Ipv6DualStack)
         } else {
             Ok(AddressFamily::Ipv6)
@@ -368,12 +714,12 @@ impl Client {
         &self,
         url: &Url,
         socket_addr: Option<net::SocketAddr>,
-    ) -> anyhow::Result<(web_transport::Session, String)> {
+    ) -> anyhow::Result<(web_transport::Session, String, Transport)> {
         let mut config = self.config.clone();
 
         // TODO support connecting to both ALPNs at the same time
         config.alpn_protocols = vec![match url.scheme() {
-            "https" => web_transport_quinn::ALPN.to_vec(),
+            "https" => web_transport_quinn::ALPN.as_bytes().to_vec(),
             "moqt" => moq_transport::setup::ALPN.to_vec(),
             _ => anyhow::bail!("url scheme must be 'https' or 'moqt'"),
         }];
@@ -425,13 +771,31 @@ impl Client {
             .context("CID not captured")?
             .to_string();
 
-        let session = match url.scheme() {
-            "https" => web_transport_quinn::connect_with(connection, url).await?,
-            "moqt" => connection.into(),
+        let (session, transport) = match url.scheme() {
+            "https" => {
+                // Offer all supported MoQT versions via WT-Available-Protocols so the server
+                // can pick by its own preference order.
+                let mut request = web_transport_quinn::proto::ConnectRequest::new(url.clone());
+                for alpn in moq_transport::setup::SUPPORTED_ALPNS {
+                    request = request.with_protocol(alpn.to_string());
+                }
+                (
+                    web_transport_quinn::Session::connect(connection, request).await?,
+                    Transport::WebTransport,
+                )
+            }
+            "moqt" => (
+                web_transport_quinn::Session::raw(
+                    connection,
+                    url.clone(),
+                    web_transport_quinn::proto::ConnectResponse::default(),
+                ),
+                Transport::RawQuic,
+            ),
             _ => unreachable!(),
         };
 
-        Ok((session.into(), connection_id_hex))
+        Ok((session.into(), connection_id_hex, transport))
     }
 
     /// Default DNS resolution logic that filters results by address family.
@@ -459,14 +823,14 @@ impl Client {
         }
 
         // Log all DNS results for debugging
-        log::debug!(
+        tracing::debug!(
             "DNS lookup for {}, family {:?}: found {} results",
             host,
             address_family,
             addrs.len()
         );
         for (i, addr) in addrs.iter().enumerate() {
-            log::debug!(
+            tracing::debug!(
                 "  DNS[{}]: {} ({})",
                 i,
                 addr,
@@ -488,15 +852,12 @@ impl Client {
                     ))?
             }
             AddressFamily::Ipv6DualStack => {
-                // IPv6 socket on Linux: dual-stack, use first result
-                log::debug!(
-                    "Using first DNS result (Linux IPv6 dual-stack): {}",
-                    addrs[0]
-                );
+                // Dual-stack socket: any address family works, use first result
+                tracing::debug!("Using first DNS result (IPv6 dual-stack): {}", addrs[0]);
                 addrs[0]
             }
             AddressFamily::Ipv6 => {
-                // IPv6 socket non-Linux: filter to IPv6 addresses
+                // IPv6-only socket: filter to IPv6 addresses
                 addrs
                     .iter()
                     .find(|a| a.is_ipv6())
@@ -508,7 +869,7 @@ impl Client {
             }
         };
 
-        log::debug!(
+        tracing::debug!(
             "Connecting from {} to {} (selected from {} DNS results)",
             local_addr,
             compatible_addr,
@@ -521,5 +882,47 @@ impl Client {
     fn parse_socket_addr(host: &str, port: u16) -> Result<net::SocketAddr, net::AddrParseError> {
         let host = format!("{}:{}", host, port);
         host.parse::<net::SocketAddr>()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    /// Installing a pass-through socket wrapper must still produce a working
+    /// endpoint. Exercises the `socket_wrapper` branch of `Endpoint::new`,
+    /// including `wrap_udp_socket` and `new_with_abstract_socket`, and verifies
+    /// the wrapper closure is actually invoked.
+    #[tokio::test]
+    async fn socket_wrapper_passthrough_builds_endpoint() {
+        let socket = std::net::UdpSocket::bind("127.0.0.1:0").expect("bind UDP socket");
+
+        // Client-only TLS config: no cert/key, so `tls.server` is `None` and
+        // `Endpoint::new` builds a client without needing certificates.
+        let tls = tls::Args {
+            disable_verify: true,
+            ..Default::default()
+        }
+        .load()
+        .expect("load client TLS config");
+
+        let called = Arc::new(AtomicBool::new(false));
+        let called_in_wrapper = called.clone();
+        let config = Config::with_socket(socket, None, tls).with_socket_wrapper(move |inner| {
+            called_in_wrapper.store(true, Ordering::SeqCst);
+            inner // pass through unchanged
+        });
+
+        let endpoint = Endpoint::new(config).expect("endpoint builds with wrapper");
+
+        assert!(
+            called.load(Ordering::SeqCst),
+            "the socket wrapper closure should have been invoked"
+        );
+        assert!(
+            endpoint.server.is_none(),
+            "client-only TLS config should yield no server"
+        );
     }
 }

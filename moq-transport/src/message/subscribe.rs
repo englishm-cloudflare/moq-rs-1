@@ -1,8 +1,11 @@
+// SPDX-FileCopyrightText: 2024-2026 Cloudflare Inc., Luke Curley, Mike English and contributors
+// SPDX-FileCopyrightText: 2023-2024 Luke Curley and contributors
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 use crate::coding::{
-    Decode, DecodeError, Encode, EncodeError, KeyValuePairs, Location, TrackNamespace,
+    validate_full_track_name, Decode, DecodeError, Encode, EncodeError, KeyValuePairs, TrackName,
+    TrackNamespace,
 };
-use crate::message::FilterType;
-use crate::message::GroupOrder;
 
 /// Sent by the subscriber to request all future objects for the given track.
 ///
@@ -14,22 +17,7 @@ pub struct Subscribe {
 
     /// Track properties
     pub track_namespace: TrackNamespace,
-    pub track_name: String, // TODO SLG - consider making a FullTrackName base struct (total size limit of 4096)
-
-    /// Subscriber Priority
-    pub subscriber_priority: u8,
-    pub group_order: GroupOrder,
-
-    /// Forward Flag
-    pub forward: bool,
-
-    /// Filter type
-    pub filter_type: FilterType,
-
-    /// The starting location for this subscription. Only present for "AbsoluteStart" and "AbsoluteRange" filter types.
-    pub start_location: Option<Location>,
-    /// End group id, inclusive, for the subscription, if applicable. Only present for "AbsoluteRange" filter type.
-    pub end_group_id: Option<u64>,
+    pub track_name: TrackName, // TODO SLG - consider making a FullTrackName base struct (total size limit of 4096)
 
     /// Optional parameters
     pub params: KeyValuePairs,
@@ -40,43 +28,15 @@ impl Decode for Subscribe {
         let id = u64::decode(r)?;
 
         let track_namespace = TrackNamespace::decode(r)?;
-        let track_name = String::decode(r)?;
+        let track_name = TrackName::decode(r)?;
+        validate_full_track_name(&track_namespace, track_name.as_bytes())?;
 
-        let subscriber_priority = u8::decode(r)?;
-        let group_order = GroupOrder::decode(r)?;
-
-        let forward = bool::decode(r)?;
-
-        let filter_type = FilterType::decode(r)?;
-        let start_location: Option<Location>;
-        let end_group_id: Option<u64>;
-        match filter_type {
-            FilterType::AbsoluteStart => {
-                start_location = Some(Location::decode(r)?);
-                end_group_id = None;
-            }
-            FilterType::AbsoluteRange => {
-                start_location = Some(Location::decode(r)?);
-                end_group_id = Some(u64::decode(r)?);
-            }
-            _ => {
-                start_location = None;
-                end_group_id = None;
-            }
-        }
-
-        let params = KeyValuePairs::decode(r)?;
+        let params = KeyValuePairs::decode_message_params(r)?;
 
         Ok(Self {
             id,
             track_namespace,
             track_name,
-            subscriber_priority,
-            group_order,
-            forward,
-            filter_type,
-            start_location,
-            end_group_id,
             params,
         })
     }
@@ -89,37 +49,7 @@ impl Encode for Subscribe {
         self.track_namespace.encode(w)?;
         self.track_name.encode(w)?;
 
-        self.subscriber_priority.encode(w)?;
-        self.group_order.encode(w)?;
-
-        self.forward.encode(w)?;
-
-        self.filter_type.encode(w)?;
-        match self.filter_type {
-            FilterType::AbsoluteStart => {
-                if let Some(start) = &self.start_location {
-                    start.encode(w)?;
-                } else {
-                    return Err(EncodeError::MissingField("StartLocation".to_string()));
-                }
-                // Just ignore end_group_id if it happens to be set
-            }
-            FilterType::AbsoluteRange => {
-                if let Some(start) = &self.start_location {
-                    start.encode(w)?;
-                } else {
-                    return Err(EncodeError::MissingField("StartLocation".to_string()));
-                }
-                if let Some(end) = self.end_group_id {
-                    end.encode(w)?;
-                } else {
-                    return Err(EncodeError::MissingField("EndGroupId".to_string()));
-                }
-            }
-            _ => {}
-        }
-
-        self.params.encode(w)?;
+        self.params.encode_message_params(w)?;
 
         Ok(())
     }
@@ -128,61 +58,20 @@ impl Encode for Subscribe {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::message::{GroupOrder, U8_VALUE_PARAMETER_TYPES};
     use bytes::BytesMut;
 
     #[test]
     fn encode_decode() {
         let mut buf = BytesMut::new();
 
-        // One parameter for testing
         let mut kvps = KeyValuePairs::new();
         kvps.set_bytesvalue(123, vec![0x00, 0x01, 0x02, 0x03]);
 
-        // FilterType = NextGroupStart
         let msg = Subscribe {
             id: 12345,
             track_namespace: TrackNamespace::from_utf8_path("test/path/to/resource"),
-            track_name: "audiotrack".to_string(),
-            subscriber_priority: 127,
-            group_order: GroupOrder::Publisher,
-            forward: true,
-            filter_type: FilterType::NextGroupStart,
-            start_location: None,
-            end_group_id: None,
-            params: kvps.clone(),
-        };
-        msg.encode(&mut buf).unwrap();
-        let decoded = Subscribe::decode(&mut buf).unwrap();
-        assert_eq!(decoded, msg);
-
-        // FilterType = AbsoluteStart
-        let msg = Subscribe {
-            id: 12345,
-            track_namespace: TrackNamespace::from_utf8_path("test/path/to/resource"),
-            track_name: "audiotrack".to_string(),
-            subscriber_priority: 127,
-            group_order: GroupOrder::Publisher,
-            forward: true,
-            filter_type: FilterType::AbsoluteStart,
-            start_location: Some(Location::new(12345, 67890)),
-            end_group_id: None,
-            params: kvps.clone(),
-        };
-        msg.encode(&mut buf).unwrap();
-        let decoded = Subscribe::decode(&mut buf).unwrap();
-        assert_eq!(decoded, msg);
-
-        // FilterType = AbsoluteRange
-        let msg = Subscribe {
-            id: 12345,
-            track_namespace: TrackNamespace::from_utf8_path("test/path/to/resource"),
-            track_name: "audiotrack".to_string(),
-            subscriber_priority: 127,
-            group_order: GroupOrder::Publisher,
-            forward: true,
-            filter_type: FilterType::AbsoluteRange,
-            start_location: Some(Location::new(12345, 67890)),
-            end_group_id: Some(23456),
+            track_name: "audiotrack".into(),
             params: kvps.clone(),
         };
         msg.encode(&mut buf).unwrap();
@@ -191,55 +80,127 @@ mod tests {
     }
 
     #[test]
-    fn encode_missing_fields() {
+    fn default_params_roundtrip() {
+        // Verify a minimal SUBSCRIBE with no params still round-trips cleanly.
         let mut buf = BytesMut::new();
-
-        // FilterType = AbsoluteStart - missing start_location
         let msg = Subscribe {
-            id: 12345,
-            track_namespace: TrackNamespace::from_utf8_path("test/path/to/resource"),
-            track_name: "audiotrack".to_string(),
-            subscriber_priority: 127,
-            group_order: GroupOrder::Publisher,
-            forward: true,
-            filter_type: FilterType::AbsoluteStart,
-            start_location: None,
-            end_group_id: None,
-            params: Default::default(),
+            id: 0,
+            track_namespace: TrackNamespace::from_utf8_path("a/b"),
+            track_name: "t".into(),
+            params: KeyValuePairs::default(),
         };
-        let encoded = msg.encode(&mut buf);
-        assert!(matches!(encoded.unwrap_err(), EncodeError::MissingField(_)));
+        msg.encode(&mut buf).unwrap();
+        let decoded = Subscribe::decode(&mut buf).unwrap();
+        assert_eq!(decoded, msg);
+    }
 
-        // FilterType = AbsoluteRange - missing start_location
+    #[test]
+    fn decode_rejects_full_track_name_over_limit() {
+        let mut buf = BytesMut::new();
         let msg = Subscribe {
-            id: 12345,
-            track_namespace: TrackNamespace::from_utf8_path("test/path/to/resource"),
-            track_name: "audiotrack".to_string(),
-            subscriber_priority: 127,
-            group_order: GroupOrder::Publisher,
-            forward: true,
-            filter_type: FilterType::AbsoluteRange,
-            start_location: None,
-            end_group_id: None,
-            params: Default::default(),
+            id: 0,
+            track_namespace: TrackNamespace {
+                fields: vec![crate::coding::TupleField {
+                    value: vec![b'a'; crate::coding::MAX_FULL_TRACK_NAME_LEN],
+                }],
+            },
+            track_name: "x".into(),
+            params: KeyValuePairs::default(),
         };
-        let encoded = msg.encode(&mut buf);
-        assert!(matches!(encoded.unwrap_err(), EncodeError::MissingField(_)));
 
-        // FilterType = AbsoluteRange - missing end_group_id
+        msg.encode(&mut buf).unwrap();
+        let err = Subscribe::decode(&mut buf).unwrap_err();
+        assert!(matches!(err, DecodeError::TrackNameTooLong));
+    }
+
+    #[test]
+    fn minimal_wire_format_has_no_fixed_subscription_fields() {
+        let mut buf = BytesMut::new();
         let msg = Subscribe {
-            id: 12345,
-            track_namespace: TrackNamespace::from_utf8_path("test/path/to/resource"),
-            track_name: "audiotrack".to_string(),
-            subscriber_priority: 127,
-            group_order: GroupOrder::Publisher,
-            forward: true,
-            filter_type: FilterType::AbsoluteRange,
-            start_location: Some(Location::new(12345, 67890)),
-            end_group_id: None,
-            params: Default::default(),
+            id: 2,
+            track_namespace: TrackNamespace::from_utf8_path("ns/v"),
+            track_name: "track".into(),
+            params: KeyValuePairs::default(),
         };
-        let encoded = msg.encode(&mut buf);
-        assert!(matches!(encoded.unwrap_err(), EncodeError::MissingField(_)));
+        msg.encode(&mut buf).unwrap();
+        let decoded = Subscribe::decode(&mut buf).unwrap();
+        assert_eq!(decoded, msg);
+    }
+
+    // ── draft-18 typed-parameter wire format ──────────────────────────────────
+    // Draft-17 §10.2 changed SUBSCRIBER_PRIORITY (0x20), GROUP_ORDER (0x22) and
+    // FORWARD (0x10) from a varint value to a single raw uint8. The default
+    // SUBSCRIBER_PRIORITY of 128 is the value that breaks the older varint form:
+    // as a draft-17 leading-1-bits varint it is two bytes (0x80 0x80),
+    // desynchronising the whole parameter block for imquic / moq-go peers that
+    // read exactly one byte. These vectors pin the byte layout against those
+    // reference implementations.
+
+    #[test]
+    fn subscribe_params_encode_typed_values_as_single_bytes() {
+        let mut params = KeyValuePairs::new();
+        params.set_forward(true); // 0x10 → 0x01
+        params.set_subscriber_priority(128); // 0x20 → 0x80 (single byte)
+        params.set_group_order(GroupOrder::Descending); // 0x22 → 0x02
+
+        let mut buf = BytesMut::new();
+        params
+            .encode_with_u8_types(&mut buf, U8_VALUE_PARAMETER_TYPES)
+            .unwrap();
+
+        // count=3; then delta-encoded (delta, value) pairs sorted by type:
+        //   FORWARD             delta 0x10, value 0x01
+        //   SUBSCRIBER_PRIORITY delta 0x10, value 0x80  ← single byte, not 0x80 0x80
+        //   GROUP_ORDER         delta 0x02, value 0x02
+        assert_eq!(buf.to_vec(), vec![0x03, 0x10, 0x01, 0x10, 0x80, 0x02, 0x02]);
+
+        let decoded =
+            KeyValuePairs::decode_with_u8_types(&mut buf, U8_VALUE_PARAMETER_TYPES).unwrap();
+        assert_eq!(decoded.forward().unwrap(), Some(true));
+        assert_eq!(decoded.subscriber_priority().unwrap(), Some(128));
+        assert_eq!(decoded.group_order().unwrap(), Some(GroupOrder::Descending));
+    }
+
+    #[test]
+    fn typed_encoding_avoids_two_byte_varint_priority() {
+        // Guard the fix boundary: the *generic* KVP encoding (even=varint) emits
+        // the desyncing two-byte 0x80 0x80 for priority 128, whereas the u8-typed
+        // encoding used by SUBSCRIBE must emit a single 0x80.
+        let mut params = KeyValuePairs::new();
+        params.set_subscriber_priority(128); // 0x20 = 128
+
+        let mut generic = BytesMut::new();
+        params.encode(&mut generic).unwrap();
+        assert_eq!(generic.to_vec(), vec![0x01, 0x20, 0x80, 0x80]);
+
+        let mut typed = BytesMut::new();
+        params
+            .encode_with_u8_types(&mut typed, U8_VALUE_PARAMETER_TYPES)
+            .unwrap();
+        assert_eq!(typed.to_vec(), vec![0x01, 0x20, 0x80]);
+    }
+
+    #[test]
+    fn subscribe_round_trips_default_priority_128() {
+        // Insert in ascending key order (FORWARD 0x10, SUBSCRIBER_PRIORITY 0x20,
+        // GROUP_ORDER 0x22) so this Vec matches the sorted order that decode
+        // reconstructs — KeyValuePairs equality is order-sensitive.
+        let mut params = KeyValuePairs::new();
+        params.set_forward(true);
+        params.set_subscriber_priority(128);
+        params.set_group_order(GroupOrder::Ascending);
+
+        let msg = Subscribe {
+            id: 7,
+            track_namespace: TrackNamespace::from_utf8_path("ns/v"),
+            track_name: "track".into(),
+            params,
+        };
+
+        let mut buf = BytesMut::new();
+        msg.encode(&mut buf).unwrap();
+        let decoded = Subscribe::decode(&mut buf).unwrap();
+        assert_eq!(decoded, msg);
+        assert_eq!(decoded.params.subscriber_priority().unwrap(), Some(128));
     }
 }

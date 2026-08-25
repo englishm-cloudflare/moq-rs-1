@@ -1,26 +1,39 @@
+// SPDX-FileCopyrightText: 2024-2026 Cloudflare Inc., Luke Curley, Mike English and contributors
+// SPDX-FileCopyrightText: 2023-2024 Luke Curley and contributors
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 use std::ops;
 use std::sync::{Arc, Mutex};
 
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 
-use crate::coding::{Encode, Location, ReasonPhrase};
+use crate::coding::{Encode, KeyValuePairs, Location, ReasonPhrase};
+use crate::message::RequestErrorCode;
 use crate::mlog;
 use crate::serve::{ServeError, TrackReaderMode};
 use crate::watch::State;
 use crate::{data, message, serve};
 
-use super::{Publisher, SessionError, SubscribeInfo, Writer};
+use super::{DeliveryFilter, Publisher, SessionError, SubscribeInfo, Writer};
 
 // This file defines Publisher handling of inbound Subscriptions
 
 #[derive(Debug)]
-struct SubscribedState {
+struct ObjectForwarderState {
     largest_location: Option<Location>,
+    stream_count: u64,
+    /// Set to true when UNSUBSCRIBE is received.  When true, Drop skips sending
+    /// PUBLISH_DONE or REQUEST_ERROR because the subscriber already terminated.
+    unsubscribed: bool,
     closed: Result<(), ServeError>,
 }
 
-impl SubscribedState {
+impl ObjectForwarderState {
+    fn record_stream_opened(&mut self) {
+        self.stream_count = self.stream_count.saturating_add(1);
+    }
+
     fn update_largest_location(&mut self, group_id: u64, object_id: u64) -> Result<(), ServeError> {
         if let Some(current_largest_location) = self.largest_location {
             let update_largest_location = Location::new(group_id, object_id);
@@ -33,31 +46,138 @@ impl SubscribedState {
     }
 }
 
-impl Default for SubscribedState {
+impl Default for ObjectForwarderState {
     fn default() -> Self {
         Self {
             largest_location: None,
+            stream_count: 0,
+            unsubscribed: false,
             closed: Ok(()),
         }
     }
 }
 
 pub struct Subscribed {
-    /// The sessions Publisher manager, used to send control messages,
-    /// create new QUIC streams, and send datagrams
-    publisher: Publisher,
-
     /// The tracknamespace and trackname for the subscription.
     pub info: SubscribeInfo,
 
-    state: State<SubscribedState>,
+    /// Data-plane half, shared with outbound PUBLISH serving.
+    forwarder: ObjectForwarder,
 
     /// Tracks if SubscribeOk has been sent yet or not. Used to send
-    /// SubscribeDone vs SubscribeError on drop.
+    /// PUBLISH_DONE vs REQUEST_ERROR on drop.
     ok: bool,
+}
+
+/// Serves a track's Objects on a session, keyed by Track Alias.
+///
+/// SUBSCRIBE-initiated ([`Subscribed`]) and PUBLISH-initiated
+/// ([`super::Published`]) subscriptions differ only in how they are set up and
+/// torn down; the object-sending loop is identical, so it lives here.
+pub(super) struct ObjectForwarder {
+    /// The session's Publisher manager, used to send control messages,
+    /// create new QUIC streams, and send datagrams.
+    publisher: Publisher,
+
+    state: State<ObjectForwarderState>,
+
+    /// Track Alias carried in every subgroup header and datagram we emit.
+    track_alias: u64,
 
     /// Optional mlog writer for logging transport events
     mlog: Option<Arc<Mutex<mlog::MlogWriter>>>,
+}
+
+impl ObjectForwarder {
+    pub(super) fn new(
+        publisher: Publisher,
+        track_alias: u64,
+        mlog: Option<Arc<Mutex<mlog::MlogWriter>>>,
+    ) -> (Self, ObjectForwarderRecv) {
+        let (send, recv) = State::default().split();
+        let send = Self {
+            publisher,
+            state: send,
+            track_alias,
+            mlog,
+        };
+        let recv = ObjectForwarderRecv { state: recv };
+        (send, recv)
+    }
+
+    pub(super) fn set_largest_location(
+        &self,
+        largest_location: Option<Location>,
+    ) -> Result<(), ServeError> {
+        self.state
+            .lock_mut()
+            .ok_or(ServeError::Cancel)?
+            .largest_location = largest_location;
+        Ok(())
+    }
+
+    /// Subgroup streams opened so far. The PUBLISH path needs this separately
+    /// from [`Self::terminal_state`], because there the terminal message is sent
+    /// by `Published::drop` after the forwarder is gone.
+    pub(super) fn stream_count(&self) -> u64 {
+        self.state.lock().stream_count
+    }
+
+    /// Snapshot the fields a terminal message needs, without holding the lock
+    /// across the send that follows.
+    fn terminal_state(&self) -> (ServeError, u64, bool) {
+        let state = self.state.lock();
+        let err = state
+            .closed
+            .as_ref()
+            .err()
+            .cloned()
+            .unwrap_or(ServeError::Done);
+        (err, state.stream_count, state.unsubscribed)
+    }
+
+    fn close(&self, err: ServeError) -> Result<(), ServeError> {
+        let state = self.state.lock();
+        state.closed.clone()?;
+
+        let mut state = state.into_mut().ok_or(ServeError::Done)?;
+        state.closed = Err(err);
+
+        Ok(())
+    }
+
+    pub(super) async fn closed(&self) -> Result<(), ServeError> {
+        loop {
+            {
+                let state = self.state.lock();
+                state.closed.clone()?;
+
+                match state.modified() {
+                    Some(notify) => notify,
+                    None => return Ok(()),
+                }
+            }
+            .await;
+        }
+    }
+
+    pub(super) async fn serve(
+        &mut self,
+        track: serve::TrackReader,
+        delivery_filter: DeliveryFilter,
+    ) -> Result<(), SessionError> {
+        match track.mode().await? {
+            TrackReaderMode::Stream(_stream) => Err(SessionError::Serve(
+                ServeError::not_implemented_ctx("stream track reader mode"),
+            )),
+            TrackReaderMode::Subgroups(subgroups) => {
+                self.serve_subgroups(subgroups, delivery_filter).await
+            }
+            TrackReaderMode::Datagrams(datagrams) => {
+                self.serve_datagrams(datagrams, delivery_filter).await
+            }
+        }
+    }
 }
 
 impl Subscribed {
@@ -65,21 +185,17 @@ impl Subscribed {
         publisher: Publisher,
         msg: message::Subscribe,
         mlog: Option<Arc<Mutex<mlog::MlogWriter>>>,
-    ) -> (Self, SubscribedRecv) {
-        let (send, recv) = State::default().split();
-        let info = SubscribeInfo::new_from_subscribe(&msg);
+    ) -> Result<(Self, ObjectForwarderRecv), SessionError> {
+        let info = SubscribeInfo::new_from_subscribe(&msg)?;
+        // The subscription's request ID doubles as its Track Alias.
+        let (forwarder, recv) = ObjectForwarder::new(publisher, info.id, mlog);
         let send = Self {
-            publisher,
-            state: send,
             info,
+            forwarder,
             ok: false,
-            mlog,
         };
 
-        // Prevents updates after being closed
-        let recv = SubscribedRecv { state: recv };
-
-        (send, recv)
+        Ok((send, recv))
     }
 
     pub async fn serve(mut self, track: serve::TrackReader) -> Result<(), SessionError> {
@@ -94,60 +210,41 @@ impl Subscribed {
     async fn serve_inner(&mut self, track: serve::TrackReader) -> Result<(), SessionError> {
         // Update largest location before sending SubscribeOk
         let largest_location = track.largest_location();
-        self.state
-            .lock_mut()
-            .ok_or(ServeError::Cancel)?
-            .largest_location = largest_location;
+        self.forwarder.set_largest_location(largest_location)?;
 
         // Send SubscribeOk using send_message_and_wait to ensure it is sent at least to the QUIC stack before
         // we start serving the track.  If a subscriber gets the stream before SubscribeOk
         // then they won't recognize the track_alias in the stream header.
-        self.publisher
+        let mut params = KeyValuePairs::default();
+        if let Some(largest) = largest_location {
+            params
+                .set_largest_object(largest)
+                .map_err(|_| SessionError::Internal)?;
+        }
+
+        self.forwarder
+            .publisher
             .send_message_and_wait(message::SubscribeOk {
                 id: self.info.id,
                 track_alias: self.info.id, // use subscription id as track alias
-                expires: 0,                // TODO SLG
-                group_order: message::GroupOrder::Descending, // TODO: resolve correct value from publisher / subscriber prefs
-                content_exists: largest_location.is_some(),
-                largest_location,
-                params: Default::default(),
+                params,
+                track_extensions: Default::default(),
             })
             .await;
 
         self.ok = true; // So we send SubscribeDone on drop
 
-        // Serve based on track mode
-        match track.mode().await? {
-            // TODO cancel track/datagrams on closed
-            TrackReaderMode::Stream(_stream) => panic!("deprecated"),
-            TrackReaderMode::Subgroups(subgroups) => self.serve_subgroups(subgroups).await,
-            TrackReaderMode::Datagrams(datagrams) => self.serve_datagrams(datagrams).await,
-        }
+        let delivery_filter = self.info.delivery_filter(largest_location);
+
+        self.forwarder.serve(track, delivery_filter).await
     }
 
     pub fn close(self, err: ServeError) -> Result<(), ServeError> {
-        let state = self.state.lock();
-        state.closed.clone()?;
-
-        let mut state = state.into_mut().ok_or(ServeError::Done)?;
-        state.closed = Err(err);
-
-        Ok(())
+        self.forwarder.close(err)
     }
 
     pub async fn closed(&self) -> Result<(), ServeError> {
-        loop {
-            {
-                let state = self.state.lock();
-                state.closed.clone()?;
-
-                match state.modified() {
-                    Some(notify) => notify,
-                    None => return Ok(()),
-                }
-            }
-            .await;
-        }
+        self.forwarder.closed().await
     }
 }
 
@@ -161,36 +258,77 @@ impl ops::Deref for Subscribed {
 
 impl Drop for Subscribed {
     fn drop(&mut self) {
-        let state = self.state.lock();
-        let err = state
-            .closed
-            .as_ref()
-            .err()
-            .cloned()
-            .unwrap_or(ServeError::Done);
-        drop(state); // Important to avoid a deadlock
+        let (err, stream_count, unsubscribed) = self.forwarder.terminal_state();
+
+        // Subscriber already sent UNSUBSCRIBE — no terminal message needed.
+        if unsubscribed {
+            return;
+        }
 
         if self.ok {
-            self.publisher.send_message(message::PublishDone {
+            self.forwarder.publisher.send_message(message::PublishDone {
                 id: self.info.id,
-                status_code: err.code(),
-                stream_count: 0, // TODO SLG
+                status_code: Self::publish_done_code(&err),
+                stream_count,
                 reason: ReasonPhrase(err.to_string()),
             });
         } else {
-            self.publisher.send_message(message::SubscribeError {
-                id: self.info.id,
-                error_code: err.code(),
-                reason_phrase: ReasonPhrase(err.to_string()),
-            });
+            // Draft-16 §9.8: subscription rejection uses REQUEST_ERROR, not the
+            // legacy SUBSCRIBE_ERROR.
+            self.forwarder.publisher.send_request_error(
+                "subscribe",
+                message::RequestError {
+                    id: self.info.id,
+                    error_code: Self::request_error_code(&err),
+                    retry_interval: 0,
+                    reason: ReasonPhrase(err.to_string()),
+                },
+            );
+            self.forwarder.publisher.drop_subscribe(self.info.id);
         };
     }
 }
 
 impl Subscribed {
+    fn publish_done_code(err: &ServeError) -> u64 {
+        match err {
+            ServeError::Done => message::PublishDoneCode::TrackEnded as u64,
+            ServeError::Closed(code) => *code,
+            _ => message::PublishDoneCode::InternalError as u64,
+        }
+    }
+
+    fn request_error_code(err: &ServeError) -> u64 {
+        match err {
+            ServeError::Closed(code) => *code,
+            ServeError::NotFound | ServeError::NotFoundWithId(_, _) => {
+                RequestErrorCode::DoesNotExist as u64
+            }
+            ServeError::Duplicate => RequestErrorCode::DuplicateSubscription as u64,
+            ServeError::Cancel | ServeError::Done => RequestErrorCode::Uninterested as u64,
+            ServeError::Mode
+            | ServeError::Size
+            | ServeError::NotImplemented(_)
+            | ServeError::NotImplementedWithId(_, _) => RequestErrorCode::NotSupported as u64,
+            ServeError::Internal(_) | ServeError::InternalWithId(_, _) => {
+                RequestErrorCode::InternalError as u64
+            }
+        }
+    }
+
+    fn is_expected_serve_shutdown(err: &SessionError) -> bool {
+        matches!(
+            err,
+            SessionError::Serve(ServeError::Cancel | ServeError::Done)
+        )
+    }
+}
+
+impl ObjectForwarder {
     async fn serve_subgroups(
         &mut self,
         mut subgroups: serve::SubgroupsReader,
+        delivery_filter: DeliveryFilter,
     ) -> Result<(), SessionError> {
         let mut tasks = FuturesUnordered::new();
         let mut done: Option<Result<(), ServeError>> = None;
@@ -201,7 +339,7 @@ impl Subscribed {
                     Ok(Some(subgroup)) => {
                         let header = data::SubgroupHeader {
                             header_type: data::StreamHeaderType::SubgroupIdExt,  // SubGroupId = Yes, Extensions = Yes, ContainsEndOfGroup = No
-                            track_alias: self.info.id, // use subscription id as track_alias
+                            track_alias: self.track_alias,
                             group_id: subgroup.group_id,
                             subgroup_id: Some(subgroup.subgroup_id),
                             publisher_priority: subgroup.priority,
@@ -213,8 +351,12 @@ impl Subscribed {
                         let mlog = self.mlog.clone();
 
                         tasks.push(async move {
-                            if let Err(err) = Self::serve_subgroup(header, subgroup, publisher, state, mlog).await {
-                                log::warn!("failed to serve subgroup: {:?}, error: {}", info, err);
+                            if let Err(err) = Self::serve_subgroup(header, subgroup, publisher, state, mlog, delivery_filter).await {
+                                if Subscribed::is_expected_serve_shutdown(&err) {
+                                    tracing::debug!(subgroup_info = ?info, error = %err, "stopped serving subgroup");
+                                } else {
+                                    tracing::warn!(subgroup_info = ?info, error = %err, "failed to serve subgroup");
+                                }
                             }
                         });
                     },
@@ -223,7 +365,9 @@ impl Subscribed {
                 },
                 res = self.closed(), if done.is_none() => done = Some(res),
                 _ = tasks.next(), if !tasks.is_empty() => {},
-                else => return Ok(done.unwrap()?),
+                // Reached only once both the subgroup source and `closed()` are
+                // disabled, which requires `done` to be set.
+                else => return Ok(done.ok_or(SessionError::Internal)??),
             }
         }
     }
@@ -232,49 +376,73 @@ impl Subscribed {
         header: data::SubgroupHeader,
         mut subgroup_reader: serve::SubgroupReader,
         mut publisher: Publisher,
-        state: State<SubscribedState>,
+        state: State<ObjectForwarderState>,
         mlog: Option<Arc<Mutex<mlog::MlogWriter>>>,
+        delivery_filter: DeliveryFilter,
     ) -> Result<(), SessionError> {
-        log::debug!(
+        tracing::trace!(
             "[PUBLISHER] serve_subgroup: starting - group_id={}, subgroup_id={:?}, priority={}",
             subgroup_reader.group_id,
             subgroup_reader.subgroup_id,
             subgroup_reader.priority
         );
 
-        let mut send_stream = publisher.open_uni().await?;
-        log::trace!("[PUBLISHER] serve_subgroup: opened unidirectional stream");
-
-        // TODO figure out u32 vs u64 priority
-        send_stream.set_priority(subgroup_reader.priority as i32);
-
-        let mut writer = Writer::new(send_stream);
-
-        log::debug!(
-            "[PUBLISHER] serve_subgroup: sending header - track_alias={}, group_id={}, subgroup_id={:?}, priority={}, header_type={:?}",
-            header.track_alias,
-            header.group_id,
-            header.subgroup_id,
-            header.publisher_priority,
-            header.header_type
-        );
-
-        writer.encode(&header).await?;
-
-        // Log subgroup header created/sent
-        if let Some(ref mlog) = mlog {
-            if let Ok(mut mlog_guard) = mlog.lock() {
-                let time = mlog_guard.elapsed_ms();
-                let stream_id = 0; // TODO: Placeholder, need actual QUIC stream ID
-                let event = mlog::subgroup_header_created(time, stream_id, &header);
-                let _ = mlog_guard.add_event(event);
-            }
-        }
-
+        let mut writer: Option<Writer> = None;
         let mut object_count = 0;
         while let Some(mut subgroup_object_reader) = subgroup_reader.next().await? {
+            if !delivery_filter.allows(subgroup_reader.group_id, subgroup_object_reader.object_id) {
+                tracing::trace!(
+                    "[PUBLISHER] serve_subgroup: filtered object group_id={}, object_id={}",
+                    subgroup_reader.group_id,
+                    subgroup_object_reader.object_id
+                );
+                continue;
+            }
+
+            if writer.is_none() {
+                let mut send_stream = publisher.open_uni().await?;
+                tracing::trace!("[PUBLISHER] serve_subgroup: opened unidirectional stream");
+
+                state
+                    .lock_mut()
+                    .ok_or(ServeError::Done)?
+                    .record_stream_opened();
+
+                // TODO figure out u32 vs u64 priority
+                send_stream.set_priority(subgroup_reader.priority as i32);
+
+                let mut new_writer = Writer::new(send_stream);
+
+                tracing::trace!(
+                    "[PUBLISHER] serve_subgroup: sending header - track_alias={}, group_id={}, subgroup_id={:?}, priority={}, header_type={:?}",
+                    header.track_alias,
+                    header.group_id,
+                    header.subgroup_id,
+                    header.publisher_priority,
+                    header.header_type
+                );
+
+                new_writer.encode(&header).await?;
+
+                // Log subgroup header created/sent
+                if let Some(ref mlog) = mlog {
+                    if let Ok(mut mlog_guard) = mlog.lock() {
+                        let time = mlog_guard.elapsed_ms();
+                        let stream_id = 0; // TODO: Placeholder, need actual QUIC stream ID
+                        let event = mlog::subgroup_header_created(time, stream_id, &header);
+                        let _ = mlog_guard.add_event(event);
+                    }
+                }
+
+                writer = Some(new_writer);
+            }
+
+            let writer = writer.as_mut().ok_or(SessionError::Internal)?;
             let subgroup_object = data::SubgroupObjectExt {
-                object_id_delta: 0, // before delta logic, used to be subgroup_object_reader.object_id,
+                // TODO(itzmanish): compute real delta when the receive side uses object IDs
+                // for ordering. Both sender and receiver must agree on the same prev tracking
+                // semantics before this is meaningful.
+                object_id_delta: 0,
                 extension_headers: subgroup_object_reader.extension_headers.clone(), // Pass through extension headers
                 payload_length: subgroup_object_reader.size,
                 status: if subgroup_object_reader.size == 0 {
@@ -285,7 +453,7 @@ impl Subscribed {
                 },
             };
 
-            log::debug!(
+            tracing::trace!(
                 "[PUBLISHER] serve_subgroup: sending object #{} - object_id={}, object_id_delta={}, payload_length={}, status={:?}, extension_headers={:?}",
                 object_count + 1,
                 subgroup_object_reader.object_id,
@@ -325,7 +493,7 @@ impl Subscribed {
             let mut chunks_sent = 0;
             let mut bytes_sent = 0;
             while let Some(chunk) = subgroup_object_reader.read().await? {
-                log::trace!(
+                tracing::trace!(
                     "[PUBLISHER] serve_subgroup: sending payload chunk #{} for object #{} ({} bytes)",
                     chunks_sent + 1,
                     object_count + 1,
@@ -336,7 +504,7 @@ impl Subscribed {
                 chunks_sent += 1;
             }
 
-            log::trace!(
+            tracing::trace!(
                 "[PUBLISHER] serve_subgroup: completed object #{} ({} chunks, {} bytes total)",
                 object_count + 1,
                 chunks_sent,
@@ -345,7 +513,7 @@ impl Subscribed {
             object_count += 1;
         }
 
-        log::info!(
+        tracing::trace!(
             "[PUBLISHER] serve_subgroup: completed subgroup (group_id={}, subgroup_id={:?}, {} objects sent)",
             subgroup_reader.group_id,
             subgroup_reader.subgroup_id,
@@ -358,11 +526,21 @@ impl Subscribed {
     async fn serve_datagrams(
         &mut self,
         mut datagrams: serve::DatagramsReader,
+        delivery_filter: DeliveryFilter,
     ) -> Result<(), SessionError> {
-        log::debug!("[PUBLISHER] serve_datagrams: starting");
+        tracing::debug!("[PUBLISHER] serve_datagrams: starting");
 
         let mut datagram_count = 0;
         while let Some(datagram) = datagrams.read().await? {
+            if !delivery_filter.allows(datagram.group_id, datagram.object_id) {
+                tracing::trace!(
+                    "[PUBLISHER] serve_datagrams: filtered datagram group_id={}, object_id={}",
+                    datagram.group_id,
+                    datagram.object_id
+                );
+                continue;
+            }
+
             // Determine datagram type based on extension headers presence
             let has_extension_headers = !datagram.extension_headers.is_empty();
             let datagram_type = if has_extension_headers {
@@ -373,7 +551,7 @@ impl Subscribed {
 
             let encoded_datagram = data::Datagram {
                 datagram_type,
-                track_alias: self.info.id, // use subscription id as track_alias
+                track_alias: self.track_alias,
                 group_id: datagram.group_id,
                 object_id: Some(datagram.object_id),
                 publisher_priority: datagram.priority,
@@ -394,7 +572,7 @@ impl Subscribed {
             let mut buffer = bytes::BytesMut::with_capacity(payload_len + 100);
             encoded_datagram.encode(&mut buffer)?;
 
-            log::debug!(
+            tracing::trace!(
                 "[PUBLISHER] serve_datagrams: sending datagram #{} - track_alias={}, group_id={}, object_id={}, priority={}, payload_len={}, extension_headers={:?}, total_encoded_len={}",
                 datagram_count + 1,
                 encoded_datagram.track_alias,
@@ -432,7 +610,7 @@ impl Subscribed {
             datagram_count += 1;
         }
 
-        log::info!(
+        tracing::trace!(
             "[PUBLISHER] serve_datagrams: completed ({} datagrams sent)",
             datagram_count
         );
@@ -441,19 +619,116 @@ impl Subscribed {
     }
 }
 
-pub(super) struct SubscribedRecv {
-    state: State<SubscribedState>,
+pub(super) struct ObjectForwarderRecv {
+    state: State<ObjectForwarderState>,
 }
 
-impl SubscribedRecv {
+impl ObjectForwarderRecv {
     pub fn recv_unsubscribe(&mut self) -> Result<(), ServeError> {
         let state = self.state.lock();
         state.closed.clone()?;
 
         if let Some(mut state) = state.into_mut() {
+            state.unsubscribed = true;
             state.closed = Err(ServeError::Cancel);
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn subscribed_state_counts_opened_streams() {
+        let mut state = ObjectForwarderState::default();
+        assert_eq!(state.stream_count, 0);
+
+        state.record_stream_opened();
+        assert_eq!(state.stream_count, 1);
+
+        state.record_stream_opened();
+        assert_eq!(state.stream_count, 2);
+    }
+
+    #[test]
+    fn recv_unsubscribe_marks_unsubscribed_and_closes() {
+        let state = State::<ObjectForwarderState>::default();
+        let (_send, recv_state) = state.split();
+        let mut recv = ObjectForwarderRecv { state: recv_state };
+
+        assert!(!recv.state.lock().unsubscribed);
+
+        recv.recv_unsubscribe().unwrap();
+
+        let locked = recv.state.lock();
+        assert!(locked.unsubscribed);
+        assert!(matches!(locked.closed, Err(ServeError::Cancel)));
+    }
+
+    #[test]
+    fn publish_done_code_maps_done_to_track_ended() {
+        assert_eq!(
+            Subscribed::publish_done_code(&ServeError::Done),
+            message::PublishDoneCode::TrackEnded as u64
+        );
+    }
+
+    #[test]
+    fn publish_done_code_passes_through_closed_code() {
+        assert_eq!(
+            Subscribed::publish_done_code(&ServeError::Closed(0x12)),
+            0x12
+        );
+    }
+
+    #[test]
+    fn publish_done_code_maps_other_errors_to_internal() {
+        assert_eq!(
+            Subscribed::publish_done_code(&ServeError::internal_ctx("test")),
+            message::PublishDoneCode::InternalError as u64
+        );
+    }
+
+    #[test]
+    fn request_error_code_maps_rejection_reasons() {
+        assert_eq!(
+            Subscribed::request_error_code(&ServeError::NotFound),
+            RequestErrorCode::DoesNotExist as u64
+        );
+        assert_eq!(
+            Subscribed::request_error_code(&ServeError::Duplicate),
+            RequestErrorCode::DuplicateSubscription as u64
+        );
+        assert_eq!(
+            Subscribed::request_error_code(&ServeError::NotImplemented("fetch".to_string())),
+            RequestErrorCode::NotSupported as u64
+        );
+        assert_eq!(
+            Subscribed::request_error_code(&ServeError::Cancel),
+            RequestErrorCode::Uninterested as u64
+        );
+        assert_eq!(
+            Subscribed::request_error_code(&ServeError::Closed(0x42)),
+            0x42
+        );
+    }
+
+    #[test]
+    fn expected_serve_shutdown_is_only_cancel_or_done() {
+        assert!(Subscribed::is_expected_serve_shutdown(
+            &SessionError::Serve(ServeError::Cancel)
+        ));
+        assert!(Subscribed::is_expected_serve_shutdown(
+            &SessionError::Serve(ServeError::Done)
+        ));
+        assert!(!Subscribed::is_expected_serve_shutdown(
+            &SessionError::Serve(ServeError::NotFound)
+        ));
+        assert!(!Subscribed::is_expected_serve_shutdown(
+            &SessionError::Internal
+        ));
     }
 }

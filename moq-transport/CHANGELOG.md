@@ -6,6 +6,130 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0](https://github.com/cloudflare/moq-rs/compare/moq-transport-v0.15.1...moq-transport-v0.16.0) - 2026-07-19
+
+### Added
+
+- *(moq-transport)* add namespace request stream cancellation
+
+### Fixed
+
+- *(moq-transport)* bound SubscribedNamespace outgoing queue
+- *(moq-transport)* bound inbound subscribe-namespace stream resources
+- *(moq-transport)* reconcile subscribe namespace cherry-pick
+
+### Other
+
+- *(moq-transport)* document received_above_low_water window bound
+- *(moq-transport)* explain subscribe-namespace cleanup guard
+- add subscribe namespace mlog events
+- allow reordered incoming request ids
+- cover subscribe namespace overlap
+- handle inbound subscribe namespace
+- add outbound subscribe namespace
+- add namespace prefix helpers
+
+## [0.15.1](https://github.com/cloudflare/moq-rs/compare/moq-transport-v0.15.0...moq-transport-v0.15.1) - 2026-07-09
+
+### Fixed
+
+- *(moq-transport)* treat track ended as clean completion
+- *(moq-transport)* send publish done after serve completion
+
+### Other
+
+- address PUBLISH review feedback
+- resolve clippy warnings
+- track pending request responses
+- route PUBLISH tracks by full track name
+- align PUBLISH session handling
+- add inbound PUBLISH handling
+
+## [0.15.0](https://github.com/cloudflare/moq-rs/compare/moq-transport-v0.14.2...moq-transport-v0.15.0) - 2026-07-08
+
+### Added
+
+- add draft-16 PUBLISH, PUBLISH_OK, and PUBLISH_DONE support for publisher-initiated track delivery
+
+### Fixed
+
+- ignore stale unsubscribe ids
+- handle request response routing
+- clean up unsubscribe state
+
+### Other
+
+- resolve clippy warnings and untrack AGENTS.md
+- use correct loglevel for logs for subgroups
+- Implement draft-16 subscription parameters and TrackName type
+- Merge remote-tracking branch 'manish/main' into mpandit/RT-469
+
+## [0.14.2](https://github.com/cloudflare/moq-rs/compare/moq-transport-v0.14.1...moq-transport-v0.14.2) - 2026-05-20
+
+### Fixed
+
+- subscribe cleaning on drop
+- apply suggestions from opencode review
+
+## [0.14.1](https://github.com/cloudflare/moq-rs/compare/moq-transport-v0.14.0...moq-transport-v0.14.1) - 2026-03-31
+
+### Other
+
+- Make repo REUSE v3.3 compliant
+- Bring copyright notices, license docs up to date
+
+## [0.14.0](https://github.com/cloudflare/moq-rs/compare/moq-transport-v0.13.1...moq-transport-v0.14.0) - 2026-03-27
+
+### Added
+
+- add Transport enum and connection path extraction
+
+## [0.13.1](https://github.com/cloudflare/moq-rs/compare/moq-transport-v0.13.0...moq-transport-v0.13.1) - 2026-03-02
+
+### Fixed
+
+- TrackReader::is_closed() false positive after mode transition
+
+### Other
+
+- Merge pull request #148 from englishm-cloudflare/me/fix-is-closed-false-positive
+
+## [0.13.0](https://github.com/cloudflare/moq-rs/compare/moq-transport-v0.12.3...moq-transport-v0.13.0) - 2026-02-18
+
+### Fixed
+
+- handle WebTransport graceful close in is_graceful_close()
+
+### Other
+
+- soften absolute claims about error conversion paths
+- remove unused direct deps from moq-transport
+- clarify graceful close semantics for WebTransport vs raw QUIC
+- Upgrade web-transport crates to v0.10.1
+
+## [0.12.3](https://github.com/cloudflare/moq-rs/compare/moq-transport-v0.12.2...moq-transport-v0.12.3) - 2026-02-18
+
+### Added
+
+- add additional debug logging for troubleshooting
+- add structured debug logging for MoQT control messages
+- *(metrics)* distinguish graceful close from connection errors
+
+### Fixed
+
+- cargo fmt and clippy lints
+- *(metrics)* address review feedback for metrics instrumentation
+
+### Other
+
+- migrate from log crate to tracing
+
+## [0.12.2](https://github.com/cloudflare/moq-rs/compare/moq-transport-v0.12.1...moq-transport-v0.12.2) - 2026-01-29
+
+### Fixed
+
+- detect and evict stale cached TrackReaders
+
 ## [0.12.1](https://github.com/cloudflare/moq-rs/compare/moq-transport-v0.12.0...moq-transport-v0.12.1) - 2025-12-18
 
 ### Other

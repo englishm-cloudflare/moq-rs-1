@@ -1,11 +1,19 @@
+// SPDX-FileCopyrightText: 2024-2026 Cloudflare Inc., Luke Curley, Mike English and contributors
+// SPDX-FileCopyrightText: 2023-2024 Luke Curley and contributors
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 use anyhow::{self, Context};
-use bytes::{Buf, Bytes};
-use moq_transport::serve::{SubgroupWriter, SubgroupsWriter, TrackWriter, TracksWriter};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
+use moq_transport::{
+    coding::TrackName,
+    serve::{SubgroupWriter, SubgroupsWriter, TrackWriter, TracksWriter},
+};
 use mp4::{self, ReadBox, TrackType};
 use std::cmp::max;
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::time;
+use tokio::sync::mpsc;
 
 pub struct Media {
     // Tracks based on their track ID.
@@ -24,10 +32,16 @@ pub struct Media {
 
     // The current track name
     current: Option<u32>,
+
+    // Optional notification for tracks as they become available.
+    track_tx: Option<mpsc::UnboundedSender<TrackName>>,
 }
 
 impl Media {
-    pub fn new(mut broadcast: TracksWriter) -> anyhow::Result<Self> {
+    pub fn new(
+        mut broadcast: TracksWriter,
+        track_tx: Option<mpsc::UnboundedSender<TrackName>>,
+    ) -> anyhow::Result<Self> {
         let catalog = broadcast
             .create(".catalog")
             .context("broadcast closed")?
@@ -37,6 +51,11 @@ impl Media {
             .context("broadcast closed")?
             .subgroups()?;
 
+        if let Some(tx) = &track_tx {
+            let _ = tx.send(TrackName::from(".catalog"));
+            let _ = tx.send(TrackName::from("0.mp4"));
+        }
+
         Ok(Media {
             tracks: Default::default(),
             broadcast,
@@ -45,6 +64,7 @@ impl Media {
             ftyp: None,
             moov: None,
             current: None,
+            track_tx,
         })
     }
 
@@ -170,7 +190,7 @@ impl Media {
             let mut selection_params = moq_catalog::SelectionParam::default();
 
             let mut track = moq_catalog::Track {
-                init_track: Some(self.init.name.clone()),
+                init_track: Some(self.init.name.to_string()),
                 name: name.clone(),
                 namespace: Some(self.broadcast.namespace.to_utf8_path()),
                 packaging: Some(moq_catalog::TrackPackaging::Cmaf),
@@ -247,6 +267,9 @@ impl Media {
 
             // Store the track publisher in a map so we can update it later.
             let track = self.broadcast.create(&name).context("broadcast closed")?;
+            if let Some(tx) = &self.track_tx {
+                let _ = tx.send(TrackName::from(name.clone()));
+            }
             let track = Track::new(track, handler, timescale);
             self.tracks.insert(id, track);
         }
@@ -262,7 +285,7 @@ impl Media {
 
         let catalog_str = serde_json::to_string_pretty(&catalog)?;
 
-        log::info!("catalog: {}", catalog_str);
+        tracing::info!("catalog: {}", catalog_str);
 
         // Create a single fragment for the segment.
         self.catalog.append(0)?.write(catalog_str.into())?;
@@ -323,6 +346,11 @@ struct Track {
     // The current segment
     current: Option<SubgroupWriter>,
 
+    // Pending moof header bytes, waiting to be combined with mdat.
+    // Per CMSF (draft-ietf-moq-cmsf-00 §3.3), each MoQ Object must contain
+    // at least one complete CMAF Chunk (moof+mdat pair).
+    pending_moof: Option<Bytes>,
+
     // The number of units per second.
     timescale: u64,
 
@@ -335,15 +363,17 @@ impl Track {
         Self {
             track: track.subgroups().unwrap(),
             current: None,
+            pending_moof: None,
             timescale,
             handler,
         }
     }
 
     pub fn header(&mut self, raw: Bytes, fragment: Fragment) -> anyhow::Result<()> {
-        if let Some(current) = self.current.as_mut() {
-            // Use the existing segment
-            current.write(raw)?;
+        if self.current.is_some() {
+            // Use the existing segment — just stash the moof for now.
+            debug_assert!(self.pending_moof.is_none(), "overwriting pending moof");
+            self.pending_moof = Some(raw);
             return Ok(());
         }
 
@@ -360,15 +390,15 @@ impl Track {
         let priority: u8 = 127;
 
         // Create a new segment.
-        let mut segment = self.track.append(priority)?;
+        let segment = self.track.append(priority)?;
 
         println!(
             "timestamp: {:?} segment: {:?}:{:?} priority: {:?}",
             fragment.timestamp, segment.info.group_id, segment.info.subgroup_id, priority
         );
 
-        // Write the fragment in it's own object.
-        segment.write(raw)?;
+        // Stash the moof — it will be combined with mdat in data().
+        self.pending_moof = Some(raw);
 
         // Save for the next iteration
         self.current = Some(segment);
@@ -377,14 +407,20 @@ impl Track {
     }
 
     pub fn data(&mut self, raw: Bytes) -> anyhow::Result<()> {
+        let moof = self.pending_moof.take().context("missing pending moof")?;
         let segment = self.current.as_mut().context("missing current fragment")?;
-        segment.write(raw)?;
+        // Combine moof+mdat into a single MoQ Object (CMSF §3.3 compliance).
+        let mut combined = BytesMut::with_capacity(moof.len() + raw.len());
+        combined.put_slice(&moof);
+        combined.put_slice(&raw);
+        segment.write(combined.freeze())?;
 
         Ok(())
     }
 
     pub fn end_group(&mut self) {
         self.current = None;
+        self.pending_moof = None;
     }
 }
 
@@ -443,8 +479,10 @@ fn sample_keyframe(moof: &mp4::MoofBox) -> bool {
                 None => default_flags,
             };
 
-            if i == 0 && trun.first_sample_flags.is_some() {
-                flags = trun.first_sample_flags.unwrap();
+            if i == 0 {
+                if let Some(first_flags) = trun.first_sample_flags {
+                    flags = first_flags;
+                }
             }
 
             // https://chromium.googlesource.com/chromium/src/media/+/master/formats/mp4/track_run_iterator.cc#177

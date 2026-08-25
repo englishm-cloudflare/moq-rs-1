@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024-2026 Cloudflare Inc., Luke Curley, Mike English and contributors
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 mod api_coordinator;
 mod file_coordinator;
 
@@ -9,7 +12,8 @@ use url::Url;
 
 use api_coordinator::{ApiCoordinator, ApiCoordinatorConfig};
 use file_coordinator::FileCoordinator;
-use moq_relay_ietf::{Coordinator, Relay, RelayConfig, Web, WebConfig};
+use moq_relay_ietf::{Coordinator, Relay, RelayConfig, SessionConfig, Web, WebConfig};
+use std::time::Duration;
 
 #[derive(Parser, Clone)]
 pub struct Cli {
@@ -29,8 +33,22 @@ pub struct Cli {
     #[arg(long)]
     pub mlog_dir: Option<PathBuf>,
 
-    /// Forward all announces to the provided server for authentication/routing.
-    /// If not provided, the relay accepts every unique announce.
+    /// Accepted for compatibility; ignored.
+    ///
+    /// Draft-18 removed MAX_REQUEST_ID, so there is no request budget to
+    /// advertise in SETUP. The flag remains so existing invocations keep
+    /// working.
+    #[arg(long, default_value_t = 100)]
+    pub max_request_id: u64,
+
+    /// Seconds to keep a cached track with no subscribers before releasing its
+    /// upstream subscription. 0 disables eviction, holding upstream
+    /// subscriptions for the lifetime of the upstream session.
+    #[arg(long, default_value_t = 30)]
+    pub cache_idle_timeout: u64,
+
+    /// Forward all PUBLISH_NAMESPACE messages to the provided server for auth/routing.
+    /// If not provided, the relay accepts every unique namespace publish.
     #[arg(long)]
     pub announce: Option<Url>,
 
@@ -78,19 +96,68 @@ pub struct Cli {
     /// Only used when --api-url is specified.
     #[arg(long, default_value = "600")]
     pub api_ttl: u64,
+
+    /// Address to expose Prometheus metrics on (e.g., "127.0.0.1:9090").
+    /// Requires the `metrics-prometheus` feature to be enabled.
+    /// When set, serves metrics at http://<addr>/metrics
+    #[arg(long)]
+    pub metrics_addr: Option<net::SocketAddr>,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    env_logger::init();
-
-    // Disable tracing so we don't get a bunch of Quinn spam.
-    let tracer = tracing_subscriber::FmtSubscriber::builder()
-        .with_max_level(tracing::Level::WARN)
-        .finish();
-    tracing::subscriber::set_global_default(tracer).unwrap();
+    // Initialize tracing with env filter (respects RUST_LOG environment variable)
+    // Default to info level, but suppress quinn's verbose output
+    //
+    // Logs go to stderr, per convention and to keep stdout clean.
+    tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info,quinn=warn")),
+        )
+        .init();
 
     let cli = Cli::parse();
+
+    // Initialize Prometheus metrics exporter if --metrics-addr is provided
+    #[cfg(feature = "metrics-prometheus")]
+    if let Some(metrics_addr) = cli.metrics_addr {
+        use metrics_exporter_prometheus::PrometheusBuilder;
+
+        // Configure histogram buckets for subscribe latency (1ms to 10s)
+        let subscribe_latency_buckets = vec![
+            0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 5.0, 10.0,
+        ];
+
+        PrometheusBuilder::new()
+            .with_http_listener(metrics_addr)
+            .set_buckets_for_metric(
+                metrics_exporter_prometheus::Matcher::Full(
+                    "moq_relay_subscribe_latency_seconds".to_string(),
+                ),
+                &subscribe_latency_buckets,
+            )?
+            .install()
+            .expect("failed to install Prometheus metrics exporter");
+
+        // Register metric descriptions (shows as # HELP in Prometheus output)
+        moq_relay_ietf::metrics::describe_metrics();
+
+        tracing::info!(
+            "metrics exporter listening on http://{}/metrics",
+            metrics_addr
+        );
+    }
+
+    #[cfg(not(feature = "metrics-prometheus"))]
+    if cli.metrics_addr.is_some() {
+        tracing::warn!(
+            "--metrics-addr was provided but the metrics-prometheus feature is not enabled. \
+             Rebuild with --features metrics-prometheus to enable the Prometheus exporter."
+        );
+    }
+
     let tls = cli.tls.load()?;
 
     if tls.server.is_none() {
@@ -124,24 +191,34 @@ async fn main() -> anyhow::Result<()> {
     let coordinator: Arc<dyn Coordinator> = if let Some(api_url) = &cli.api_url {
         let config = ApiCoordinatorConfig::new(api_url.clone(), relay_url).with_ttl(cli.api_ttl);
         let api_coordinator = ApiCoordinator::new(config);
-        log::info!("using API coordinator: {}", api_url);
+        tracing::info!("using API coordinator: {}", api_url);
         Arc::new(api_coordinator)
     } else {
-        log::info!("using file coordinator: {}", cli.coordinator_file.display());
+        tracing::info!("using file coordinator: {}", cli.coordinator_file.display());
         Arc::new(FileCoordinator::new(&cli.coordinator_file, relay_url))
     };
 
     // Create a QUIC server for media.
-    let relay = Relay::new(RelayConfig {
-        tls: tls.clone(),
-        bind: Some(cli.bind),
-        endpoints: vec![],
-        qlog_dir: qlog_dir_for_relay,
-        mlog_dir: mlog_dir_for_relay,
-        node: cli.node,
-        announce: cli.announce,
-        coordinator,
-    })?;
+    let relay = Relay::new_with_cache_idle_timeout(
+        RelayConfig {
+            tls: tls.clone(),
+            bind: Some(cli.bind),
+            endpoints: vec![],
+            qlog_dir: qlog_dir_for_relay,
+            mlog_dir: mlog_dir_for_relay,
+            node: cli.node,
+            announce: cli.announce,
+            coordinator,
+            session: SessionConfig {
+                max_request_id: cli.max_request_id,
+            },
+            // No connection tagger: the default binary treats every inbound
+            // connection as a public client. Embedders that run relay-to-relay
+            // meshes supply a tagger to mark internal peers.
+            connection_tagger: None,
+        },
+        Duration::from_secs(cli.cache_idle_timeout),
+    )?;
 
     if cli.dev {
         // Create a web server too.
@@ -159,4 +236,16 @@ async fn main() -> anyhow::Result<()> {
     }
 
     relay.run().await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn max_request_id_flag_overrides_default() {
+        let cli = Cli::try_parse_from(["moq-relay-ietf", "--max-request-id", "7"]).unwrap();
+
+        assert_eq!(cli.max_request_id, 7);
+    }
 }

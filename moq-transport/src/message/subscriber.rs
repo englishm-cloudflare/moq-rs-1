@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2024-2026 Cloudflare Inc., Luke Curley, Mike English and contributors
+// SPDX-FileCopyrightText: 2023-2024 Luke Curley and contributors
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 use crate::message::{self, Message};
 use std::fmt;
 
@@ -44,19 +48,21 @@ macro_rules! subscriber_msgs {
     }
 }
 
-// Defines messages that a SUBSCRIBER would send, or that a PUBLISHER would handle
+// Defines messages that a SUBSCRIBER would send, or that a PUBLISHER would handle.
 subscriber_msgs! {
+    // Subscriber-initiated requests.
     Subscribe,
-    SubscribeUpdate,
+    RequestUpdate,
+    // Shared responses used by subscriber-side request handlers.
+    RequestOk,
+    RequestError,
+    // Subscription and fetch control.
     Unsubscribe,
     Fetch,
     FetchCancel,
     TrackStatus,
     SubscribeNamespace,
-    UnsubscribeNamespace,
+    // Responses/control for publisher-initiated requests.
     PublishNamespaceCancel,
-    PublishNamespaceOk,
-    PublishNamespaceError,
     PublishOk,
-    PublishError,
 }

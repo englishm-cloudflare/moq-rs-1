@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2024-2026 Cloudflare Inc., Luke Curley, Mike English and contributors
+// SPDX-FileCopyrightText: 2023-2024 Luke Curley and contributors
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 use super::State;
 use futures::channel::oneshot;
 use std::collections::VecDeque;
@@ -12,6 +16,20 @@ impl<T> Queue<T> {
         match self.state.lock_mut() {
             Some(mut state) => state.push_back((item, None)),
             None => return Err(item),
+        };
+
+        Ok(())
+    }
+
+    /// Push an item without panicking if the queue lock is poisoned.
+    pub fn try_push(&mut self, item: T) -> Result<(), T> {
+        match self.state.try_lock_mut() {
+            Ok(Some(mut state)) => state.push_back((item, None)),
+            Ok(None) => return Err(item),
+            Err(_) => {
+                tracing::error!("queue lock poisoned while pushing item");
+                return Err(item);
+            }
         };
 
         Ok(())

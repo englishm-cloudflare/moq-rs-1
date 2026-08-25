@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024-2026 Cloudflare Inc., Luke Curley, Mike English and contributors
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 use crate::coding::{Decode, DecodeError, Encode, EncodeError};
 
 #[derive(Default, Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
@@ -47,8 +50,8 @@ mod tests {
         assert_eq!(
             buf.to_vec(),
             vec![
-                0x70, 0x39, // 12345 encoded as VarInt
-                0x80, 0x01, 0x09, 0x32 // 67890 encoded as VarInt
+                0xB0, 0x39, // 12345 encoded as VarInt
+                0xC1, 0x09, 0x32 // 67890 encoded as VarInt
             ]
         );
         let decoded = Location::decode(&mut buf).unwrap();
