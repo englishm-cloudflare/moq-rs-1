@@ -179,6 +179,18 @@ impl From<&TrackName> for TrackName {
     }
 }
 
+impl PartialEq<str> for TrackName {
+    fn eq(&self, other: &str) -> bool {
+        self.value == other.as_bytes()
+    }
+}
+
+impl PartialEq<&str> for TrackName {
+    fn eq(&self, other: &&str) -> bool {
+        self.value == other.as_bytes()
+    }
+}
+
 impl Decode for TrackName {
     fn decode<R: bytes::Buf>(r: &mut R) -> Result<Self, DecodeError> {
         let size = usize::decode(r)?;
