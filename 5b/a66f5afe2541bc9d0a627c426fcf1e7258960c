@@ -1,0 +1,45 @@
+moq-transport/src/session/error.rs
+  s_218c7e92f23666::t_6ce5442dc2b460 160
+moq-transport/src/session/subscribed_tracks.rs
+  s_218c7e92f23666::t_02fda4d0dfce40 444-467
+  s_811002a037fc2a::t_dc574524afcc98 443
+moq-relay-ietf/src/producer.rs
+  s_218c7e92f23666::t_0dcd87772843dc 1281
+  s_218c7e92f23666::t_a185e3f4dc0894 1604,1608
+  s_218c7e92f23666::t_c82ff9bb04786c 44-45,52-56,68,95,112,202-205,257-262,315,1270,1294,1312-1313,1320,1375,1379,1389-1390,1440,1461,1471,1486-1487,1493,1495,1502-1504,1519,1527,1538,1938,1951-1952,1977-1978,2004-2005
+  s_218c7e92f23666::t_c026dc033357d4 1283-1284,1982
+  s_218c7e92f23666::t_89b187c12a47e6 1494
+  s_218c7e92f23666::t_442806fc143247 57,59-67,69-94,96-111,113,1341-1346,1348-1355,1357,1371,1405-1407
+  s_218c7e92f23666::t_fcf7d7efac2fc5 1702,1714,1717-1718,1931-1937,1939-1950,1953-1962,1965-1976,1979-1981,1983-2003,2006-2013
+  s_218c7e92f23666::t_6ce5442dc2b460 314,1263,1319,1433-1434,1449-1452,1513-1514,1564-1574,1577-1583
+  s_218c7e92f23666::t_6ac2405812b1ce 1288-1290,1535-1537,1963-1964
+  s_218c7e92f23666::t_6dc8ab052f72ba 58,2014
+moq-transport/src/session/publisher.rs
+  s_218c7e92f23666::t_02fda4d0dfce40 1472-1479
+moq-transport/src/message/mod.rs
+  s_218c7e92f23666::t_02fda4d0dfce40 506-520
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "5ba66f5afe2541bc9d0a627c426fcf1e7258960c",
+  "prompts": {},
+  "sessions": {
+    "s_218c7e92f23666": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_f9bb77b56ffeupwtgWAmQ6h26Y",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    },
+    "s_811002a037fc2a": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_f9bb7030effeImUhe4ydttTn7f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
