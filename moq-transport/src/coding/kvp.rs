@@ -123,8 +123,12 @@ impl KeyValuePair {
             let first = u64::decode(r)?;
             let second = u64::decode(r)?;
             let mut value = Vec::new();
-            first.encode(&mut value)?;
-            second.encode(&mut value)?;
+            first
+                .encode(&mut value)
+                .map_err(|_| DecodeError::InvalidParameter)?;
+            second
+                .encode(&mut value)
+                .map_err(|_| DecodeError::InvalidParameter)?;
             KeyValuePair::new_bytes(abs_type, value)
         } else if abs_type % 2 == 0 {
             // Even type → varint value.
