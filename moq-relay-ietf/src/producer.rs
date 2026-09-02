@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2024-2026 Cloudflare Inc., Luke Curley, Mike English and contributors
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::sync::Arc;
 
@@ -12,7 +12,7 @@ use moq_transport::{
     serve::{FullTrackName, ServeError, TrackReader, TracksReader},
     session::{
         Publisher, ServeWithDeadlineError, SessionError, Subscribed, SubscribedNamespace,
-        TrackStatusRequested,
+        SubscribedTracks, TrackStatusRequested,
     },
 };
 use tokio::sync::{broadcast, OwnedSemaphorePermit, Semaphore};
@@ -22,8 +22,8 @@ use crate::{
     metrics::{GaugeGuard, TimingGuard},
     remote::RemoteSubscribeError,
     upstream_namespaces::UpstreamNamespaces,
-    Coordinator, Locals, NamespaceChange, RemoteManager, SessionContext, TrackChange,
-    UpstreamReady,
+    Coordinator, Locals, NamespaceChange, PublishedTrackChange, RemoteManager, SessionContext,
+    TrackChange, TrackSnapshot, UpstreamReady,
 };
 
 /// Ceiling on how long a SUBSCRIBE is held waiting for a publisher to appear.
@@ -41,6 +41,22 @@ const MAX_RENDEZVOUS_TIMEOUT: std::time::Duration = std::time::Duration::from_se
 /// Keep one session from consuming the relay's entire rendezvous budget. Half
 /// the relay-wide capacity remains available to other sessions.
 const MAX_CONCURRENT_RENDEZVOUS_HOLDS_PER_SESSION: usize = MAX_CONCURRENT_RENDEZVOUS_HOLDS / 2;
+const MAX_SUBSCRIBE_TRACKS_TRACKS: usize = 1024;
+const MAX_SUBSCRIBE_TRACKS_CHILDREN: usize = 128;
+
+type ProducerTask = futures::future::BoxFuture<'static, ()>;
+
+struct SubscribeTracksSlot {
+    desired: Option<TrackReader>,
+    active: Option<TrackReader>,
+    blocked: bool,
+    _permit: OwnedSemaphorePermit,
+}
+
+struct PublishCompletion {
+    full_name: FullTrackName,
+    generation: TrackReader,
+}
 
 /// How often a held SUBSCRIBE asks the coordinator again whether a publisher has
 /// turned up.
@@ -123,6 +139,8 @@ pub struct Producer {
     rendezvous_hold_permits: Arc<Semaphore>,
     /// Relay-level context for this MoQT session.
     context: SessionContext,
+    subscribe_tracks_child_permits: Arc<Semaphore>,
+    subscribe_tracks_slot_permits: Arc<Semaphore>,
 }
 
 /// Why the wait for upstream readiness ended without the subscription being
@@ -174,6 +192,8 @@ impl Producer {
                 MAX_CONCURRENT_RENDEZVOUS_HOLDS_PER_SESSION,
             )),
             context,
+            subscribe_tracks_child_permits: Arc::new(Semaphore::new(MAX_SUBSCRIBE_TRACKS_CHILDREN)),
+            subscribe_tracks_slot_permits: Arc::new(Semaphore::new(MAX_SUBSCRIBE_TRACKS_TRACKS)),
         }
     }
 
@@ -224,13 +244,14 @@ impl Producer {
 
     /// Run the producer to serve subscribe requests.
     pub async fn run(self) -> Result<(), SessionError> {
-        let mut tasks: FuturesUnordered<futures::future::BoxFuture<'static, ()>> =
-            FuturesUnordered::new();
+        let mut tasks: FuturesUnordered<ProducerTask> = FuturesUnordered::new();
+        let (child_tasks, mut child_task_rx) = tokio::sync::mpsc::unbounded_channel();
 
         loop {
             let mut publisher_subscribed = self.publisher.clone();
             let mut publisher_track_status = self.publisher.clone();
             let mut publisher_subscribed_namespace = self.publisher.clone();
+            let mut publisher_subscribed_tracks = self.publisher.clone();
 
             tokio::select! {
                 // Handle a new subscribe request
@@ -290,6 +311,22 @@ impl Producer {
                         }
                     }.boxed())
                 },
+                Some(subscribed_tracks) = publisher_subscribed_tracks.subscribed_tracks() => {
+                    let this = self.clone();
+                    let child_tasks = child_tasks.clone();
+                    tasks.push(async move {
+                        let prefix = subscribed_tracks.namespace_prefix.to_utf8_path();
+                        tracing::info!(namespace_prefix = %prefix, "serving subscribe tracks");
+                        if let Err(err) = this.serve_subscribe_tracks(subscribed_tracks, child_tasks).await {
+                            if Self::is_expected_serve_shutdown(&err) {
+                                tracing::debug!(namespace_prefix = %prefix, error = %err, "stopped serving subscribe tracks");
+                            } else {
+                                tracing::warn!(namespace_prefix = %prefix, error = %err, "failed serving subscribe tracks");
+                            }
+                        }
+                    }.boxed())
+                },
+                Some(task) = child_task_rx.recv() => tasks.push(task),
                 _= tasks.next(), if !tasks.is_empty() => {},
                 else => return Ok(()),
             };
@@ -821,7 +858,7 @@ impl Producer {
 
                 change = track_changes.recv() => {
                     match change {
-                        Ok(TrackChange::Added { scope: change_scope, track })
+                        Ok(TrackChange::Added { scope: change_scope, track, .. })
                             if change_scope.as_deref() == scope
                                 && track.info.namespace == *namespace
                                 && track.info.name == *track_name =>
@@ -1067,7 +1104,7 @@ impl Producer {
         change: TrackChange,
     ) -> Result<(), anyhow::Error> {
         match change {
-            TrackChange::Added { scope, track } => {
+            TrackChange::Added { scope, track, .. } => {
                 if scope.as_deref() != self.context.scope()
                     || !subscribed_namespace
                         .namespace_prefix
@@ -1079,7 +1116,9 @@ impl Producer {
                 self.publish_track_for_namespace(subscribed_namespace, known, publish_tasks, track)
                     .await
             }
-            TrackChange::Removed { scope, full_name } => {
+            TrackChange::Removed {
+                scope, full_name, ..
+            } => {
                 if scope.as_deref() == self.context.scope() {
                     known.remove(&full_name);
                 }
@@ -1148,6 +1187,340 @@ impl Producer {
             .boxed(),
         );
 
+        Ok(())
+    }
+
+    async fn serve_subscribe_tracks(
+        self,
+        mut request: SubscribedTracks,
+        child_tasks: tokio::sync::mpsc::UnboundedSender<ProducerTask>,
+    ) -> Result<(), anyhow::Error> {
+        let mut changes = self.locals.subscribe_published_track_changes();
+        let snapshot = match self.locals.list_tracks_matching_for_session(
+            self.context.scope(),
+            &request.namespace_prefix,
+            self.context.identity(),
+            MAX_SUBSCRIBE_TRACKS_TRACKS,
+        ) {
+            Ok(TrackSnapshot::Tracks(snapshot)) => snapshot,
+            Ok(TrackSnapshot::TooLarge) => {
+                request.reject(
+                    RequestErrorCode::NamespaceTooLarge as u64,
+                    "too many matching tracks",
+                )?;
+                return Ok(());
+            }
+            Err(error) => {
+                request.reject(RequestErrorCode::InternalError as u64, "internal error")?;
+                return Err(error.into());
+            }
+        };
+
+        let mut slots = HashMap::with_capacity(snapshot.len());
+        for track in snapshot {
+            let permit = match self
+                .subscribe_tracks_slot_permits
+                .clone()
+                .try_acquire_owned()
+            {
+                Ok(permit) => permit,
+                Err(_) => {
+                    request.reject(
+                        RequestErrorCode::ExcessiveLoad as u64,
+                        "subscribe tracks session limit exceeded",
+                    )?;
+                    return Ok(());
+                }
+            };
+            slots.insert(
+                full_name_for_track(&track),
+                SubscribeTracksSlot {
+                    desired: Some(track),
+                    active: None,
+                    blocked: false,
+                    _permit: permit,
+                },
+            );
+        }
+
+        request.ok()?;
+        let (completed, mut completions) = tokio::sync::mpsc::unbounded_channel();
+        let initial: Vec<_> = slots.keys().cloned().collect();
+        for full_name in initial {
+            self.start_subscribe_tracks_publish(
+                &mut request,
+                &mut slots,
+                &full_name,
+                &child_tasks,
+                &completed,
+            )
+            .await?;
+        }
+
+        loop {
+            tokio::select! {
+                biased;
+                result = request.closed() => {
+                    result?;
+                    return Ok(());
+                }
+                Some(completion) = completions.recv() => {
+                    let mut retry = false;
+                    let mut remove = false;
+                    if let Some(slot) = slots.get_mut(&completion.full_name) {
+                        if slot.active.as_ref().is_some_and(|active| same_track_generation(active, &completion.generation)) {
+                            slot.active = None;
+                        }
+                        if slot.desired.as_ref().is_some_and(|desired| same_track_generation(desired, &completion.generation)) {
+                            slot.desired = None;
+                        }
+                        retry = slot.active.is_none() && slot.desired.is_some() && !slot.blocked;
+                        remove = slot.active.is_none() && slot.desired.is_none() && !slot.blocked;
+                    }
+                    if remove {
+                        slots.remove(&completion.full_name);
+                    } else if retry {
+                        self.start_subscribe_tracks_publish(
+                            &mut request,
+                            &mut slots,
+                            &completion.full_name,
+                            &child_tasks,
+                            &completed,
+                        ).await?;
+                    }
+                }
+                change = changes.recv() => {
+                    match change {
+                        Ok(PublishedTrackChange::Added { scope, track, origin }) => {
+                            if scope.as_deref() != self.context.scope()
+                                || !request.namespace_prefix.is_prefix_of(&track.namespace)
+                                || origin.as_ref().is_some_and(|origin| origin.same_as(self.context.identity()))
+                            {
+                                continue;
+                            }
+                            let full_name = full_name_for_track(&track);
+                            if let Some(slot) = slots.get_mut(&full_name) {
+                                if slot.blocked
+                                    || slot.active.as_ref().is_some_and(|active| same_track_generation(active, &track))
+                                {
+                                    continue;
+                                }
+                                slot.desired = Some(track);
+                            } else {
+                                if slots.len() == MAX_SUBSCRIBE_TRACKS_TRACKS {
+                                    request.terminate(RequestErrorCode::ExcessiveLoad as u32)?;
+                                    return Ok(());
+                                }
+                                let permit = match self.subscribe_tracks_slot_permits.clone().try_acquire_owned() {
+                                    Ok(permit) => permit,
+                                    Err(_) => {
+                                        request.terminate(RequestErrorCode::ExcessiveLoad as u32)?;
+                                        return Ok(());
+                                    }
+                                };
+                                slots.insert(full_name.clone(), SubscribeTracksSlot {
+                                    desired: Some(track),
+                                    active: None,
+                                    blocked: false,
+                                    _permit: permit,
+                                });
+                            }
+                            self.start_subscribe_tracks_publish(
+                                &mut request,
+                                &mut slots,
+                                &full_name,
+                                &child_tasks,
+                                &completed,
+                            ).await?;
+                        }
+                        Ok(PublishedTrackChange::Removed { scope, full_name, track }) => {
+                            if scope.as_deref() != self.context.scope() {
+                                continue;
+                            }
+                            let mut remove = false;
+                            if let Some(slot) = slots.get_mut(&full_name) {
+                                if slot.desired.as_ref().is_some_and(|desired| same_track_generation(desired, &track)) {
+                                    slot.desired = None;
+                                }
+                                remove = slot.active.is_none() && slot.desired.is_none() && !slot.blocked;
+                            }
+                            if remove {
+                                slots.remove(&full_name);
+                            }
+                        }
+                        Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                            metrics::counter!("moq_relay_change_channel_lagged_total", "channel" => "subscribe_tracks")
+                                .increment(skipped);
+                            self.resync_subscribe_tracks(
+                                &mut request,
+                                &mut slots,
+                                &child_tasks,
+                                &completed,
+                            ).await?;
+                        }
+                        Err(broadcast::error::RecvError::Closed) => return Ok(()),
+                    }
+                }
+            }
+        }
+    }
+
+    async fn resync_subscribe_tracks(
+        &self,
+        request: &mut SubscribedTracks,
+        slots: &mut HashMap<FullTrackName, SubscribeTracksSlot>,
+        child_tasks: &tokio::sync::mpsc::UnboundedSender<ProducerTask>,
+        completed: &tokio::sync::mpsc::UnboundedSender<PublishCompletion>,
+    ) -> Result<(), anyhow::Error> {
+        let snapshot = match self.locals.list_tracks_matching_for_session(
+            self.context.scope(),
+            &request.namespace_prefix,
+            self.context.identity(),
+            MAX_SUBSCRIBE_TRACKS_TRACKS,
+        ) {
+            Ok(TrackSnapshot::Tracks(snapshot)) => snapshot,
+            Ok(TrackSnapshot::TooLarge) => {
+                request.terminate(RequestErrorCode::ExcessiveLoad as u32)?;
+                return Ok(());
+            }
+            Err(error) => {
+                request.terminate(RequestErrorCode::InternalError as u32)?;
+                return Err(error.into());
+            }
+        };
+
+        let current: HashMap<_, _> = snapshot
+            .into_iter()
+            .map(|track| (full_name_for_track(&track), track))
+            .collect();
+        for (full_name, slot) in slots.iter_mut() {
+            if slot.blocked {
+                continue;
+            }
+            slot.desired = current.get(full_name).cloned();
+        }
+        for (full_name, track) in current {
+            if slots.contains_key(&full_name) {
+                continue;
+            }
+            let permit = match self
+                .subscribe_tracks_slot_permits
+                .clone()
+                .try_acquire_owned()
+            {
+                Ok(permit) => permit,
+                Err(_) => {
+                    request.terminate(RequestErrorCode::ExcessiveLoad as u32)?;
+                    return Ok(());
+                }
+            };
+            slots.insert(
+                full_name,
+                SubscribeTracksSlot {
+                    desired: Some(track),
+                    active: None,
+                    blocked: false,
+                    _permit: permit,
+                },
+            );
+        }
+        let pending: Vec<_> = slots
+            .iter()
+            .filter(|(_, slot)| slot.desired.is_some() && slot.active.is_none() && !slot.blocked)
+            .map(|(full_name, _)| full_name.clone())
+            .collect();
+        for full_name in pending {
+            self.start_subscribe_tracks_publish(request, slots, &full_name, child_tasks, completed)
+                .await?;
+        }
+        slots.retain(|_, slot| slot.desired.is_some() || slot.active.is_some() || slot.blocked);
+        Ok(())
+    }
+
+    async fn start_subscribe_tracks_publish(
+        &self,
+        request: &mut SubscribedTracks,
+        slots: &mut HashMap<FullTrackName, SubscribeTracksSlot>,
+        full_name: &FullTrackName,
+        child_tasks: &tokio::sync::mpsc::UnboundedSender<ProducerTask>,
+        completed: &tokio::sync::mpsc::UnboundedSender<PublishCompletion>,
+    ) -> Result<(), anyhow::Error> {
+        let Some(slot) = slots.get(full_name) else {
+            return Ok(());
+        };
+        if slot.active.is_some() || slot.blocked {
+            return Ok(());
+        }
+        let Some(track) = slot.desired.clone() else {
+            return Ok(());
+        };
+
+        let permit = match self
+            .subscribe_tracks_child_permits
+            .clone()
+            .try_acquire_owned()
+        {
+            Ok(permit) => permit,
+            Err(_) => {
+                request.publish_blocked(&full_name.namespace, &full_name.name)?;
+                if let Some(slot) = slots.get_mut(full_name) {
+                    slot.blocked = true;
+                    slot.desired = None;
+                }
+                return Ok(());
+            }
+        };
+
+        let mut params = KeyValuePairs::default();
+        if !request.forward {
+            params.set_forward(false);
+        }
+        let mut publisher = self.publisher.clone();
+        let publish = publisher.publish(track.clone(), params);
+        let published = match tokio::select! {
+            biased;
+            closed = request.closed() => {
+                let error = match closed {
+                    Ok(()) => ServeError::Done,
+                    Err(error) => error,
+                };
+                return Err(error.into());
+            }
+            published = publish => published,
+        } {
+            Ok(published) => published,
+            Err(SessionError::Serve(ServeError::Duplicate)) => {
+                if let Some(slot) = slots.get_mut(full_name) {
+                    slot.desired = None;
+                }
+                return Ok(());
+            }
+            Err(error) => return Err(error.into()),
+        };
+        if let Some(slot) = slots.get_mut(full_name) {
+            slot.active = Some(track.clone());
+        }
+
+        let completion = PublishCompletion {
+            full_name: full_name.clone(),
+            generation: track,
+        };
+        let completed = completed.clone();
+        let namespace = full_name.namespace.to_utf8_path();
+        let track_name = full_name.name.to_string();
+        child_tasks
+            .send(
+                async move {
+                    let _permit = permit;
+                    match published.serve().await {
+                        Ok(()) => tracing::debug!(namespace = %namespace, track = %track_name, "finished serving PUBLISH for SUBSCRIBE_TRACKS"),
+                        Err(error) => tracing::warn!(namespace = %namespace, track = %track_name, error = %error, "failed serving PUBLISH for SUBSCRIBE_TRACKS"),
+                    }
+                    let _ = completed.send(completion);
+                }
+                .boxed(),
+            )
+            .map_err(|_| ServeError::Cancel)?;
         Ok(())
     }
 
@@ -1231,6 +1604,10 @@ fn full_name_for_track(track: &TrackReader) -> FullTrackName {
         namespace: track.namespace.clone(),
         name: track.name.clone(),
     }
+}
+
+fn same_track_generation(left: &TrackReader, right: &TrackReader) -> bool {
+    Arc::ptr_eq(&left.info, &right.info)
 }
 
 #[cfg(test)]
