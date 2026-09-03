@@ -1,0 +1,61 @@
+moq-transport/src/coding/track_namespace.rs
+  s_218c7e92f23666::t_dbef5c8afd4b38 456-462,485-487,493-497,802-818,820
+  s_218c7e92f23666::t_9db47da32afa51 819,821
+moq-transport/src/session/publisher.rs
+  s_218c7e92f23666::t_dbef5c8afd4b38 25-26,117-122,228-229,855-859,910-951,1017-1021,1225-1231,1233,1247,1433-1436,1439,1460-1522
+  s_218c7e92f23666::t_9369f5544f432f 1523
+moq-transport/src/message/publish_blocked.rs
+  s_218c7e92f23666::t_dbef5c8afd4b38 1-46
+moq-transport/src/message/publisher.rs
+  s_218c7e92f23666::t_dbef5c8afd4b38 60
+moq-transport/src/message/params.rs
+  s_218c7e92f23666::t_dbef5c8afd4b38 44-45,296-300,306-310,314-321,451,499-517
+  s_218c7e92f23666::t_15defe26e71b6b 518-519
+moq-transport/src/message/mod.rs
+  s_218c7e92f23666::t_dbef5c8afd4b38 33,46,63,76,188,207,276,285,368,370-378,385,390,394,493-520,623-639
+moq-transport/src/session/error.rs
+  s_218c7e92f23666::t_dbef5c8afd4b38 160
+moq-transport/src/session/subscriber.rs
+  s_218c7e92f23666::t_dbef5c8afd4b38 900-904
+moq-transport/src/session/mod.rs
+  s_218c7e92f23666::t_dbef5c8afd4b38 19,39,477-496,1009,1138-1146,1478-1481,2662-2673
+  s_218c7e92f23666::t_fb411c9887c644 2674-2675
+  s_218c7e92f23666::t_68123cc6c37a70 1606-1613,2676-2702
+  s_218c7e92f23666::t_efadf98fb5a945 2703-2704
+moq-transport/src/session/subscribed_tracks.rs
+  s_218c7e92f23666::t_dbef5c8afd4b38 1-491
+moq-transport/src/message/subscribe_tracks.rs
+  s_218c7e92f23666::t_dbef5c8afd4b38 1-54
+moq-transport/src/coding/kvp.rs
+  s_218c7e92f23666::t_dbef5c8afd4b38 95,109,122-132,160,174,202-212,291-298,312-317,333-341,352
+moq-transport/src/message/subscriber.rs
+  s_218c7e92f23666::t_dbef5c8afd4b38 65
+moq-relay-ietf/src/session.rs
+  s_218c7e92f23666::t_b7e61c9969b7b5 6,254-266,281-282,292,302,329,338-341,435,444,461-469
+  s_218c7e92f23666::t_f2ed250a53550b 470
+moq-relay-ietf/src/consumer.rs
+  s_218c7e92f23666::t_b7e61c9969b7b5 550-554
+moq-relay-ietf/src/producer.rs
+  s_218c7e92f23666::t_f27012cdf54336 202-203
+  s_218c7e92f23666::t_b7e61c9969b7b5 4,15,25-26,44-119,204-206,258-263,314-318,324,384-399,931,1177,1189-1191,1263-1619,1702-1705,1709-1710,1717-1721,1725,1728-1730,1892-1909,1911,1922,1929-1931,1937-1978,2006-2151,2153-2205
+  s_218c7e92f23666::t_08643aac7f4f53 2206
+  s_218c7e92f23666::t_7b9af074a7cb22 2152
+moq-relay-ietf/src/local.rs
+  s_218c7e92f23666::t_b7e61c9969b7b5 18,350,412-430,452-454,519,525,583-588,646-683,828-842,851,864,878-884,1082,1106,1134,1150,1155-1161,1401-1408,1435-1506,2283,2295-2297
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "7c591a5dc45833d3797b93c10938b06316d4118d",
+  "prompts": {},
+  "sessions": {
+    "s_218c7e92f23666": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_f9bb77b56ffeupwtgWAmQ6h26Y",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
