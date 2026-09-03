@@ -1,0 +1,39 @@
+moq-transport/src/serve/subgroup.rs
+  s_4406d5f980327c::t_d16318b61a2f12 797-809
+  s_4406d5f980327c::t_92e9865e18d1e9 1634-1649
+moq-transport/src/session/subscriber.rs
+  s_4406d5f980327c::t_410e48a5ad5e22 988
+  s_4406d5f980327c::t_7614e6c17dc56e 25-27
+  s_4406d5f980327c::t_92dbebcee714f8 3570-3579
+  s_4406d5f980327c::t_c5eb2c59a22165 2520-2529
+  s_4406d5f980327c::t_2bd57b3b0b02ad 1089-1093
+moq-transport/src/session/subscribe.rs
+  s_4406d5f980327c::t_876e9ec8677cff 756-757,759-760
+  s_4406d5f980327c::t_03212ec1f0e5b2 868-884,889,894-926,931-937,941-953
+  s_4406d5f980327c::t_6293f071adba07 8,10
+  s_4406d5f980327c::t_721f37746528d8 201-204,214-215
+  s_4406d5f980327c::t_eb97e075e94326 758,885-888,890-893,927-930,938-940
+  s_4406d5f980327c::t_0d3d26ea6b25c9 136-176
+  s_4406d5f980327c::t_bb461382083c4a 444-448,456-461
+  s_4406d5f980327c::t_35e4a3d6f7ad34 495-507
+  s_4406d5f980327c::t_64a4328638c5bd 396-417
+  s_4406d5f980327c::t_10307ea27738d9 859
+  s_4406d5f980327c::t_9c9cd4cc78a0bf 724
+  s_4406d5f980327c::t_5a3b563950d9aa 681-697
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "057af84ac424b3b4c5d0631bc1c006da7deb5f0c",
+  "prompts": {},
+  "sessions": {
+    "s_4406d5f980327c": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_f9a4bb668ffe7kOwbmgCnMb1E3",
+        "model": "@cf/moonshotai/kimi-k3"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
