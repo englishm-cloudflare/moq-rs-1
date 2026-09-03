@@ -1,0 +1,47 @@
+moq-transport/src/coding/track_namespace.rs
+  s_218c7e92f23666::t_dbef5c8afd4b38 456-462,485-487,493-497,802-818,820
+  s_218c7e92f23666::t_9db47da32afa51 819,821
+moq-transport/src/session/publisher.rs
+  s_218c7e92f23666::t_dbef5c8afd4b38 25-26,117-122,228-229,855-859,910-951,1017-1021,1225-1231,1233,1247,1433-1436,1439,1460-1522
+  s_218c7e92f23666::t_9369f5544f432f 1523
+moq-transport/src/message/publish_blocked.rs
+  s_218c7e92f23666::t_dbef5c8afd4b38 1-46
+moq-transport/src/message/publisher.rs
+  s_218c7e92f23666::t_dbef5c8afd4b38 60
+moq-transport/src/message/params.rs
+  s_218c7e92f23666::t_dbef5c8afd4b38 44-45,296-300,306-310,314-321,451,499-517
+  s_218c7e92f23666::t_15defe26e71b6b 518-519
+moq-transport/src/message/mod.rs
+  s_218c7e92f23666::t_dbef5c8afd4b38 33,46,63,76,188,207,276,285,368,370-378,385,390,394,493-520,623-639
+moq-transport/src/session/error.rs
+  s_218c7e92f23666::t_dbef5c8afd4b38 160
+moq-transport/src/session/subscriber.rs
+  s_218c7e92f23666::t_dbef5c8afd4b38 900-904
+moq-transport/src/session/mod.rs
+  s_218c7e92f23666::t_dbef5c8afd4b38 19,39,477-496,1009,1138-1146,1478-1481,2654-2665
+  s_218c7e92f23666::t_fb411c9887c644 2666-2667
+moq-transport/src/session/subscribed_tracks.rs
+  s_218c7e92f23666::t_dbef5c8afd4b38 1-491
+moq-transport/src/message/subscribe_tracks.rs
+  s_218c7e92f23666::t_dbef5c8afd4b38 1-54
+moq-transport/src/coding/kvp.rs
+  s_218c7e92f23666::t_dbef5c8afd4b38 95,109,122-132,160,174,202-212,291-298,312-317,333-341,352
+moq-transport/src/message/subscriber.rs
+  s_218c7e92f23666::t_dbef5c8afd4b38 65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "9de57e1925aca2a6b4218aa3819b6a6e92be906b",
+  "prompts": {},
+  "sessions": {
+    "s_218c7e92f23666": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_f9bb77b56ffeupwtgWAmQ6h26Y",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
