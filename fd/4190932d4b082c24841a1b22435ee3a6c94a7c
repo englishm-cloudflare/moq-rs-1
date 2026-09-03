@@ -1,0 +1,26 @@
+moq-relay-ietf/src/producer.rs
+  s_218c7e92f23666::t_f524bb0b2db14f 1727,1889-1896,1900,1904-1905,1926-1927
+  s_218c7e92f23666::t_0b0f8c09f24ca3 2043-2053,2055-2060,2062-2091,2143-2144,2148-2154,2156-2157
+  s_218c7e92f23666::t_53e16a449d68b1 2042
+  s_218c7e92f23666::t_80ee193aee674a 2041,2054,2093-2142,2155
+  s_218c7e92f23666::t_885517f47e6423 1707,1718,1898-1899,1901-1903,1906,1908,1919,1928,1934-1975
+  s_218c7e92f23666::t_ff226fbb8af6c3 1715-1716,2061,2092
+  s_218c7e92f23666::t_80042605ab9e3c 1714,1717,2145-2147
+  s_218c7e92f23666::t_6acecfaafa339a 1897
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "fd4190932d4b082c24841a1b22435ee3a6c94a7c",
+  "prompts": {},
+  "sessions": {
+    "s_218c7e92f23666": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_f9bb77b56ffeupwtgWAmQ6h26Y",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
