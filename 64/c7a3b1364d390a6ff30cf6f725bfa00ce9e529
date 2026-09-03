@@ -1,0 +1,21 @@
+moq-transport/src/serve/subgroup.rs
+  s_4406d5f980327c::t_169aa15859c8a4 740-746
+  s_4406d5f980327c::t_fe7f4635ba5566 1683
+  s_4406d5f980327c::t_03191bc2c5450f 1656-1682,1684-1687
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "64c7a3b1364d390a6ff30cf6f725bfa00ce9e529",
+  "prompts": {},
+  "sessions": {
+    "s_4406d5f980327c": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_f9a4bb668ffe7kOwbmgCnMb1E3",
+        "model": "@cf/moonshotai/kimi-k3"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
