@@ -1,0 +1,20 @@
+AGENTS.md
+  s_982400c6b466c1::t_0d9c02ad55d973 21-23
+  s_982400c6b466c1::t_e97bf991031c2d 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "a7ed6cbefb96a7087f5c2b7222e95e22999e4b94",
+  "prompts": {},
+  "sessions": {
+    "s_982400c6b466c1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_f91f75f8fffeJiVz39iRrenLQa",
+        "model": "@cf/moonshotai/kimi-k3"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
