@@ -1,0 +1,25 @@
+moq-test-client/src/moqtest.rs
+  s_982400c6b466c1::t_bd1905f1daedeb 1800-1810
+  s_982400c6b466c1::t_97cf3286693976 1811-1814
+  s_982400c6b466c1::t_fc6b57f14a8550 1070-1072,1074
+  s_982400c6b466c1::t_ae6f346c8a7354 1204,1207-1219
+  s_982400c6b466c1::t_be7556af3a4978 1815
+moq-test-client/src/main.rs
+  s_982400c6b466c1::t_ff8dbdec1cc648 238
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "11a45ab298d58e6660d76eaaf89a05541a1fea4e",
+  "prompts": {},
+  "sessions": {
+    "s_982400c6b466c1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_f91f75f8fffeJiVz39iRrenLQa",
+        "model": "@cf/moonshotai/kimi-k3"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
