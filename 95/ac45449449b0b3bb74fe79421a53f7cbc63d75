@@ -1,0 +1,65 @@
+moq-relay-ietf/src/auth/types.rs
+  s_b6884877be5bac::t_835a8ad9647ddd 1
+AGENTS.md
+  s_b6884877be5bac::t_835a8ad9647ddd 2
+moq-relay-ietf/src/auth/hook.rs
+  s_b6884877be5bac::t_835a8ad9647ddd 1
+moq-relay-ietf/src/auth/mod.rs
+  s_b6884877be5bac::t_835a8ad9647ddd 1,93
+  s_b6884877be5bac::t_d9499bee50de8e 94
+moq-relay-ietf/src/auth/session.rs
+  s_b6884877be5bac::t_835a8ad9647ddd 1,8,58,79
+moq-relay-ietf/src/auth/cat.rs
+  s_b6884877be5bac::t_79ce04755cc41b 2414,2416-2418,2429-2445
+  s_b6884877be5bac::t_44a4086758a579 2415,2419-2428
+  s_b6884877be5bac::t_835a8ad9647ddd 1,35,153,173,195,245,266,281,296,306,312-320,327,340,352,404,414,427,498,534,542
+moq-transport/src/setup/authorization_token.rs
+  s_b6884877be5bac::t_835a8ad9647ddd 1
+  s_b6884877be5bac::t_5056c7b644f627 2-4
+moq-relay-ietf/src/auth/scope.rs
+  s_b6884877be5bac::t_835a8ad9647ddd 1,10,82,96
+moq-relay-ietf/src/auth/token.rs
+  s_b6884877be5bac::t_835a8ad9647ddd 1
+Cargo.lock
+  s_b6884877be5bac::t_5e71f961cdfd8e 1676
+moq-clock-ietf/Cargo.toml
+  s_b6884877be5bac::t_042442d8fcdefa 31
+moq-clock-ietf/src/cli.rs
+  s_b6884877be5bac::t_8c85dd625e9acc 5,8-41,75-123
+moq-clock-ietf/src/main.rs
+  s_b6884877be5bac::t_0b91831a9b1cfe 18,37-42,61,65,105,109
+moq-relay-ietf/Cargo.toml
+  s_b6884877be5bac::t_e4fc50f73ea303 40-41,87,103
+moq-relay-ietf/src/consumer.rs
+  s_b6884877be5bac::t_465c46f802df9e 215-220
+moq-relay-ietf/src/metrics.rs
+  s_b6884877be5bac::t_77135e948581d7 86,98
+moq-transport/src/session/mod.rs
+  s_b6884877be5bac::t_6883d4f6942a5d 48,196,698-716,730,736,750-790,844-850
+moq-transport/src/session/published_namespace.rs
+  s_b6884877be5bac::t_abe51db4b81e30 110-113,238,272
+moq-transport/src/session/publisher.rs
+  s_b6884877be5bac::t_59ba7cb83a84e7 248-277
+moq-transport/src/session/subscriber.rs
+  s_b6884877be5bac::t_0a92feac0ae430 336-365
+moq-transport/src/setup/client.rs
+  s_b6884877be5bac::t_f2ce2671004b75 13,25-49,91-94,129-164
+moq-transport/src/setup/mod.rs
+  s_b6884877be5bac::t_8af873eb203bbc 11,17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "95ac45449449b0b3bb74fe79421a53f7cbc63d75",
+  "prompts": {},
+  "sessions": {
+    "s_b6884877be5bac": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_f7cfa410bffewA9wkS6rE24ea5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
