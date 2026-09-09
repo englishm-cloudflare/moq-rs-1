@@ -1,0 +1,19 @@
+moq-transport/src/setup/authorization_token.rs
+  s_b6884877be5bac::t_a4b7d3508a053b 18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "efd89911032524d8b64cd3727946c698dcf6ab87",
+  "prompts": {},
+  "sessions": {
+    "s_b6884877be5bac": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_f7cfa410bffewA9wkS6rE24ea5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
