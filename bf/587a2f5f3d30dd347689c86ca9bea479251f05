@@ -1,0 +1,53 @@
+moq-transport/src/setup/mod.rs
+  s_b6884877be5bac::t_e5eedd752613b5 11,17
+moq-relay-ietf/src/consumer.rs
+  s_b6884877be5bac::t_cb76a1f9623ee4 215-218
+  s_b6884877be5bac::t_6580ab418748ad 219-220
+moq-transport/src/session/mod.rs
+  s_b6884877be5bac::t_e5eedd752613b5 582-599,606,609-618,670-675
+  s_b6884877be5bac::t_a45a086fa56030 607-608
+  s_b6884877be5bac::t_c42cb77a078e86 46
+  s_b6884877be5bac::t_732c6efd5a21ee 676
+moq-transport/src/setup/authorization_token.rs
+  s_b6884877be5bac::t_a45a086fa56030 39-42
+  s_b6884877be5bac::t_e5eedd752613b5 1-38,43-66
+moq-transport/src/session/publisher.rs
+  s_b6884877be5bac::t_e5eedd752613b5 190-200
+moq-clock-ietf/Cargo.toml
+  s_b6884877be5bac::t_e5eedd752613b5 31
+moq-relay-ietf/src/metrics.rs
+  s_b6884877be5bac::t_cb76a1f9623ee4 86,98
+moq-transport/src/setup/client.rs
+  s_b6884877be5bac::t_2d794ecb80257d 32-34,159
+  s_b6884877be5bac::t_75ceadc3bed6a7 13,25-31,35-49,91-94,129-158,160-163
+  s_b6884877be5bac::t_84e68ba3ebcf62 164
+moq-clock-ietf/src/main.rs
+  s_b6884877be5bac::t_e5eedd752613b5 18,37-42,61-62,101-102
+  s_b6884877be5bac::t_a45a086fa56030 63-64,103-104
+moq-transport/src/session/subscriber.rs
+  s_b6884877be5bac::t_e5eedd752613b5 278-288
+moq-clock-ietf/src/cli.rs
+  s_b6884877be5bac::t_e5eedd752613b5 5,8-9,11-28,32-40,75,78-94,123
+  s_b6884877be5bac::t_cb76a1f9623ee4 29-31,41,95-104,106-112,114-122
+  s_b6884877be5bac::t_a33f82782bfffd 105,113
+  s_b6884877be5bac::t_b9a923fd2cf928 76-77
+  s_b6884877be5bac::t_46369c6cee3290 10
+Cargo.lock
+  s_b6884877be5bac::t_3e2e9de7ab762e 1676
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "bf587a2f5f3d30dd347689c86ca9bea479251f05",
+  "prompts": {},
+  "sessions": {
+    "s_b6884877be5bac": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_f7cfa410bffewA9wkS6rE24ea5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
