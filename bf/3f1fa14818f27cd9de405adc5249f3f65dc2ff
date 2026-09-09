@@ -1,0 +1,23 @@
+moq-relay-ietf/src/metrics.rs
+  s_b6884877be5bac::t_d6730a39e76046 98
+moq-relay-ietf/src/auth/cat.rs
+  s_b6884877be5bac::t_d6730a39e76046 173
+moq-relay-ietf/Cargo.toml
+  s_b6884877be5bac::t_d6730a39e76046 40-41,87,101
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "bf3f1fa14818f27cd9de405adc5249f3f65dc2ff",
+  "prompts": {},
+  "sessions": {
+    "s_b6884877be5bac": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_f7cfa410bffewA9wkS6rE24ea5",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
