@@ -1,5 +1,0 @@
-# Force the GNU linker for build scripts (which compile and run on the host).
-# The sandbox's rust-lld produces binaries that crash due to a missing _start
-# symbol under this container's seccomp/linker configuration.
-[target.x86_64-unknown-linux-gnu]
-linker = "/usr/bin/gcc"

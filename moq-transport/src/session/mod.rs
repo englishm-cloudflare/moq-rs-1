@@ -3098,10 +3098,11 @@ mod tests {
 
     // ── FETCH bidi-stream lifecycle (B2, B3, decode_bidi_response) ───────────
     //
-    // Full integration tests that run handle_bidi_request with FETCH_OK and
-    // FETCH_CANCEL are deferred to PR F2, when the publisher gains a real FETCH
-    // dispatch path.  The tests below verify the wire codec for each fix, which
-    // is the necessary precondition for the integration behaviour to be correct.
+    // B2 has a full handle_bidi_request integration test (inject FetchOk via
+    // bidi_response_map, verify bidi stream FINs).  B3 and decode_bidi_response
+    // are tested at the codec level — `handle_bidi_request` level FETCH_CANCEL
+    // test (B3 integration, verifying the serving task stops) is deferred to PR
+    // F2 when the publisher gains a real FETCH dispatch path.
 
     /// B2: `FetchOk` in `is_terminal` — FINs the bidi stream after `FetchOk`.
     ///
