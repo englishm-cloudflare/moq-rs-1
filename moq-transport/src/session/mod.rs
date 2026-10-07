@@ -130,6 +130,11 @@ pub(crate) type BidiResponseMap = Arc<Mutex<HashMap<u64, RequestStreamSink>>>;
 enum BidiRequestKind {
     Subscribe,
     Publish,
+    /// Inbound FETCH: data arrives on a separate unidirectional stream keyed by
+    /// request ID.  When the bidi control stream tears down, the subscriber's
+    /// routing entry for this request ID must be cancelled so that any waiter
+    /// on the data-stream receiver unblocks immediately.
+    Fetch,
     Other,
 }
 
@@ -163,6 +168,16 @@ impl Drop for BidiRequestCleanup {
                 if let Some(subscriber) = &self.subscriber {
                     subscriber.abort_publish_received(self.id);
                 }
+            }
+            BidiRequestKind::Fetch => {
+                // Inbound FETCH: the serving task (publisher side) must be
+                // notified to stop.  The publisher API and its cancel path are
+                // added in PR F2 (`publisher.cancel_fetch(self.id)`).  There is
+                // nothing to do on the subscriber side here: the `fetch_streams`
+                // routing table lives on the session that *sent* the FETCH
+                // (outbound), not on the session that *received* it (inbound),
+                // and the two sides always have opposite request-ID parity, so
+                // any lookup here would find nothing.
             }
             BidiRequestKind::Other => {}
         }
@@ -1146,14 +1161,20 @@ impl Session {
         }
         let mut writer = ResetOnDropWriter::new(writer);
 
-        // Classify the request. One-shot request/response flows are bounded in
+        // Classify the request.  One-shot request/response flows are bounded in
         // the response phase below; long-lived flows (SUBSCRIBE, PUBLISH,
-        // PUBLISH_NAMESPACE, FETCH) may legitimately stay open until an explicit
+        // PUBLISH_NAMESPACE) may legitimately stay open until an explicit
         // terminal message and are therefore not bounded.
+        //
+        // FETCH is one-shot on the bidi control stream: the publisher sends
+        // FETCH_OK (or REQUEST_ERROR) and immediately FINs.  The actual object
+        // data travels on a separate unidirectional stream opened by the
+        // publisher, keyed by the same request ID.
         let bounded_response = matches!(&msg, Message::TrackStatus(_) | Message::RequestUpdate(_));
         let request_kind = match &msg {
             Message::Subscribe(_) => BidiRequestKind::Subscribe,
             Message::Publish(_) => BidiRequestKind::Publish,
+            Message::Fetch(_) => BidiRequestKind::Fetch,
             _ => BidiRequestKind::Other,
         };
 
@@ -1236,12 +1257,19 @@ impl Session {
                                     // One-shot requests (TRACK_STATUS, REQUEST_UPDATE) get
                                     // exactly one reply, so REQUEST_OK ends them just as
                                     // REQUEST_ERROR does.
+                                    //
+                                    // FETCH_OK is unconditionally terminal: the publisher
+                                    // FINs its bidi send-half immediately after sending it.
+                                    // Object data travels on a separate unidirectional stream,
+                                    // so keeping the bidi stream open serves no purpose and
+                                    // would exhaust MAX_CONCURRENT_BIDI_STREAMS slots.
                                     let is_terminal = matches!(
                                         response.message,
                                         Message::RequestError(_)
                                             | Message::PublishDone(_)
                                             | Message::PublishNamespaceDone(_)
                                             | Message::Unsubscribe(_)
+                                            | Message::FetchOk(_)
                                     ) || (bounded_response
                                         && matches!(response.message, Message::RequestOk(_)));
                                     if let Err(err) = Self::encode_bidi_response(
@@ -1399,6 +1427,11 @@ impl Session {
                 Message::PublishNamespaceDone(_) | Message::Unsubscribe(_) => {
                     Some(FollowupEnd::OtherTerminal)
                 }
+                // FETCH_CANCEL is the subscriber's signal that it no longer
+                // wants the fetch response.  Treat it as a terminal follow-up
+                // so the publisher's serving task is dropped promptly and the
+                // bidi slot is released.
+                Message::FetchCancel(_) => Some(FollowupEnd::OtherTerminal),
                 _ => None,
             };
 
@@ -1587,6 +1620,12 @@ impl Session {
                 }))
             }
             wire_id::Unsubscribe => Ok(Message::Unsubscribe(message::Unsubscribe {
+                id: request_id,
+            })),
+            // FETCH_CANCEL is a follow-up sent by the subscriber on the FETCH
+            // bidi stream to cancel an in-progress FETCH.  Like UNSUBSCRIBE,
+            // it carries only the request ID (injected here).
+            wire_id::FetchCancel => Ok(Message::FetchCancel(message::FetchCancel {
                 id: request_id,
             })),
             // NAMESPACE / NAMESPACE_DONE have no Request ID field, so nothing

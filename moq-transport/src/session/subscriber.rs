@@ -379,6 +379,20 @@ pub struct Subscriber {
     /// Inbound PUBLISH requests waiting to be consumed by the application.
     publish_received_queue: Queue<PublishReceived>,
 
+    /// Pending FETCH data-stream deliveries, keyed by FETCH request ID.
+    ///
+    /// When an outbound FETCH is issued (PR F3), the subscriber inserts a
+    /// [`oneshot::Sender<Reader>`] here before the bidi control stream is
+    /// opened.  When the publisher later opens the corresponding unidirectional
+    /// data stream — identified by the [`crate::data::FetchHeader::request_id`]
+    /// in its header — the stream routing loop calls [`Self::route_fetch_stream`]
+    /// to hand the `Reader` to the waiting receiver.
+    ///
+    /// If the bidi control stream tears down before the data stream arrives
+    /// (e.g. the peer cancelled or the session closed), [`Self::cancel_fetch_stream`]
+    /// drops the sender, causing the receiver to get [`tokio::sync::oneshot::error::RecvError`].
+    fetch_streams: Arc<Mutex<HashMap<u64, tokio::sync::oneshot::Sender<Reader>>>>,
+
     /// The queue we will write any outbound control messages we want to send, the session run_send task
     /// will process the queue and send the message on the control stream.
     outgoing: Queue<Message>,
@@ -468,6 +482,7 @@ impl Subscriber {
             subscriber_names: Default::default(),
             publishes_received: Default::default(),
             publish_received_queue: Default::default(),
+            fetch_streams: Default::default(),
             bidi_task_tx,
             bidi_response_map,
         }
@@ -1690,6 +1705,73 @@ impl Subscriber {
         self.clear_subscription_reservations(request_id)
     }
 
+    // ── FETCH data-stream routing ─────────────────────────────────────────────
+
+    /// Register a routing slot for an outbound FETCH's data stream.
+    ///
+    /// Called by the outbound-FETCH state machine (PR F3) before the bidi
+    /// control stream is opened, so the routing entry is always present when
+    /// the publisher's data stream arrives.
+    ///
+    /// Returns a receiver that resolves to the [`Reader`] positioned
+    /// immediately after the [`crate::data::FetchHeader`].  The receiver
+    /// resolves with an error if the bidi stream tears down before the data
+    /// stream arrives (see [`Self::cancel_fetch_stream`]).
+    #[allow(dead_code)] // called by the outbound FETCH state machine (PR F3)
+    pub(super) fn register_fetch_stream(
+        &self,
+        request_id: u64,
+    ) -> tokio::sync::oneshot::Receiver<Reader> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        if let Ok(mut map) = self.fetch_streams.lock() {
+            map.insert(request_id, tx);
+        }
+        rx
+    }
+
+    /// Cancel the routing slot for a FETCH, signalling any waiter.
+    ///
+    /// Called from [`crate::session::BidiRequestCleanup`] when the FETCH bidi
+    /// control stream tears down, and from the outbound-FETCH Drop impl (PR F3).
+    /// Dropping the sender causes the receiver to get
+    /// [`tokio::sync::oneshot::error::RecvError`], which the waiter interprets
+    /// as cancellation.
+    pub(super) fn cancel_fetch_stream(&self, request_id: u64) {
+        if let Ok(mut map) = self.fetch_streams.lock() {
+            map.remove(&request_id);
+            // Dropping the Sender signals the Receiver.
+        }
+    }
+
+    /// Route an incoming unidirectional FETCH data stream to its waiting receiver.
+    ///
+    /// Returns `true` if a waiter was found and the stream was delivered,
+    /// `false` if no waiter is registered (unexpected stream from the peer —
+    /// the caller logs and discards).
+    fn route_fetch_stream(&self, request_id: u64, reader: Reader) -> bool {
+        let sender = match self.fetch_streams.lock() {
+            Ok(mut map) => map.remove(&request_id),
+            Err(_) => {
+                tracing::error!(request_id, "fetch_streams lock poisoned");
+                return false;
+            }
+        };
+        match sender {
+            Some(tx) => {
+                // send() errors only when the receiver has been dropped, which
+                // means the FETCH was cancelled.  Log and discard.
+                if tx.send(reader).is_err() {
+                    tracing::debug!(
+                        request_id,
+                        "FETCH data stream arrived after the request was cancelled"
+                    );
+                }
+                true
+            }
+            None => false,
+        }
+    }
+
     /// Release the alias and track-name reservations held by one subscription.
     fn clear_subscription_reservations(&self, request_id: u64) -> Result<(), SessionError> {
         self.track_alias_map
@@ -1860,9 +1942,9 @@ impl Subscriber {
             stream_header.header_type
         );
 
-        // No fetch support yet
-        if !stream_header.header_type.is_subgroup() {
-            return Err(SessionError::unimplemented("non-SUBGROUP stream types"));
+        // Route FETCH data streams to the outbound-FETCH waiter, if present.
+        if stream_header.header_type.is_fetch() {
+            return self.recv_fetch_stream(reader, stream_header);
         }
 
         // Log subgroup header parsed/received
@@ -1909,6 +1991,49 @@ impl Subscriber {
         }
 
         res
+    }
+
+    /// Handle a FETCH data stream (stream type `0x05`).
+    ///
+    /// The [`data::StreamHeader`] is already fully decoded (including the
+    /// [`data::FetchHeader`] that carries the request ID), so this method just
+    /// routes the remaining [`Reader`] — positioned immediately after the
+    /// stream header — to the waiter registered by
+    /// [`Self::register_fetch_stream`].
+    ///
+    /// If no waiter is present the stream is discarded with a debug log; an
+    /// unexpected FETCH data stream is not session-fatal.
+    fn recv_fetch_stream(
+        &mut self,
+        reader: Reader,
+        stream_header: data::StreamHeader,
+    ) -> Result<(), SessionError> {
+        // `StreamHeader::decode` already decoded the FetchHeader for us.
+        let fetch_header = match stream_header.fetch_header {
+            Some(h) => h,
+            None => {
+                // Should not happen: is_fetch() was true, so StreamHeader must
+                // have decoded a FetchHeader.  Treat as an internal error.
+                tracing::error!(
+                    "FETCH stream header missing FetchHeader after is_fetch() — internal error"
+                );
+                return Err(SessionError::Internal);
+            }
+        };
+
+        tracing::debug!(
+            request_id = fetch_header.request_id,
+            "FETCH data stream received"
+        );
+
+        if !self.route_fetch_stream(fetch_header.request_id, reader) {
+            tracing::debug!(
+                request_id = fetch_header.request_id,
+                "FETCH data stream has no registered waiter — discarding"
+            );
+        }
+
+        Ok(())
     }
 
     /// Continue handling the reception of a new stream from the QUIC session.
@@ -4473,5 +4598,121 @@ mod tests {
         assert!(subscriber.publishes_received.lock().unwrap().is_empty());
         assert!(subscriber.track_alias_map.lock().unwrap().is_empty());
         assert!(subscriber.subscriber_names.lock().unwrap().is_empty());
+    }
+
+    // ── FETCH data-stream routing ─────────────────────────────────────────────
+
+    /// Registering a routing slot and then routing an incoming stream delivers
+    /// the Reader to the waiting receiver.
+    #[tokio::test]
+    async fn fetch_stream_routing_delivers_reader_to_waiter() {
+        let (session_a, session_b) = loopback_raw_session_pair().await;
+        let subscriber = test_subscriber(session_a);
+
+        // Register a slot for request ID 2 (even = client-initiated).
+        let rx = subscriber.register_fetch_stream(2);
+
+        // Simulate the publisher opening a uni stream by writing a FetchHeader
+        // then routing it via the same subscriber handle.
+        //
+        // We cannot open a real QUIC uni stream in a pure unit test without
+        // running the full session, so instead we verify the routing contract
+        // entirely through the subscriber API: route_fetch_stream places a
+        // Reader into the channel that register_fetch_stream prepared.
+        //
+        // Create a minimal Reader from session_b (won't have data, but
+        // constructing it proves the API compiles and the channel resolves).
+        let (send, recv) = session_b.open_bi().await.unwrap();
+        drop(send); // close the write end immediately
+        let reader = Reader::new(recv);
+
+        let routed = subscriber.route_fetch_stream(2, reader);
+        assert!(
+            routed,
+            "route_fetch_stream must return true when a waiter is registered"
+        );
+
+        // The receiver should resolve immediately.
+        let result = rx.await;
+        assert!(result.is_ok(), "fetch_stream receiver must get the Reader");
+
+        // The routing table must be empty after delivery.
+        assert!(
+            subscriber.fetch_streams.lock().unwrap().is_empty(),
+            "fetch_streams map must be empty after delivery"
+        );
+    }
+
+    /// Routing without a registered waiter returns false and leaves the map
+    /// empty.
+    #[tokio::test]
+    async fn fetch_stream_routing_without_waiter_returns_false() {
+        let (session_a, _session_b) = loopback_raw_session_pair().await;
+        let subscriber = test_subscriber(session_a.clone());
+
+        // No register_fetch_stream call.
+        let (send, recv) = session_a.open_bi().await.unwrap();
+        drop(send);
+        let reader = Reader::new(recv);
+
+        let routed = subscriber.route_fetch_stream(99, reader);
+        assert!(
+            !routed,
+            "route_fetch_stream must return false when no waiter is registered"
+        );
+        assert!(subscriber.fetch_streams.lock().unwrap().is_empty());
+    }
+
+    /// Cancelling a routing slot causes the receiver to get an error.
+    #[tokio::test]
+    async fn fetch_stream_cancel_signals_receiver() {
+        let (session_a, _) = loopback_raw_session_pair().await;
+        let subscriber = test_subscriber(session_a);
+
+        let rx = subscriber.register_fetch_stream(4);
+        assert_eq!(
+            subscriber.fetch_streams.lock().unwrap().len(),
+            1,
+            "map must have one entry after register"
+        );
+
+        subscriber.cancel_fetch_stream(4);
+
+        assert!(
+            subscriber.fetch_streams.lock().unwrap().is_empty(),
+            "map must be empty after cancel"
+        );
+        // The receiver must get an error because the sender was dropped.
+        assert!(
+            rx.await.is_err(),
+            "receiver must get RecvError after cancel"
+        );
+    }
+
+    /// Routing a stream after the receiver was dropped returns true
+    /// (the map entry was present) but logs a debug message.
+    #[tokio::test]
+    async fn fetch_stream_routing_after_receiver_dropped_returns_true() {
+        let (session_a, session_b) = loopback_raw_session_pair().await;
+        let subscriber = test_subscriber(session_a);
+
+        let rx = subscriber.register_fetch_stream(6);
+        // Drop the receiver before the data stream arrives.
+        drop(rx);
+
+        let (send, recv) = session_b.open_bi().await.unwrap();
+        drop(send);
+        let reader = Reader::new(recv);
+
+        // route_fetch_stream finds the entry, tries to send, gets Err
+        // (receiver dropped) — but returns true because an entry was present.
+        let routed = subscriber.route_fetch_stream(6, reader);
+        assert!(
+            routed,
+            "route_fetch_stream must return true even when receiver is already dropped"
+        );
+
+        // Map must be empty after the route attempt (entry removed on send regardless).
+        assert!(subscriber.fetch_streams.lock().unwrap().is_empty());
     }
 }
