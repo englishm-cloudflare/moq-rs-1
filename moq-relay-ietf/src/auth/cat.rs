@@ -3047,4 +3047,147 @@ mod tests {
             DenyReason::ScopeMismatch
         ));
     }
+
+    // ------------------------------------------------------------------
+    // Fetch(7) authorization — map_operation and token_has_action coverage
+    // ------------------------------------------------------------------
+    //
+    // These tests use real CatToken instances to verify that
+    // `map_operation(AuthzOperation::Fetch{..})` correctly maps to
+    // `MoqtAction::Fetch` and that `token_has_action` correctly distinguishes
+    // `ActionAbsent` (no Fetch scope in token) from `ScopeMismatch` (Fetch
+    // scope exists but excludes this namespace/track).
+
+    /// `map_operation` maps `AuthzOperation::Fetch` to `MoqtAction::Fetch(7)`.
+    /// A token that grants Fetch for the exact namespace+track is allowed.
+    #[tokio::test]
+    async fn fetch_grant_allows_fetch_via_cat_hook() {
+        let key = generate_key();
+        let hook = hook(vec![AuthPublicKey::es256(key.pem)]);
+
+        // subscriber() includes Fetch(7), Subscribe(4), SubscribeNamespace(3)
+        let token = subscriber_token(&key.signer, &[b"sports"]);
+        let principal = principal_for(&hook, token).await;
+
+        let namespace = TrackNamespace::from_utf8_path("sports/football");
+        let track = TrackName::from("video");
+
+        let decision = decide(
+            &hook,
+            &principal,
+            AuthzOperation::Fetch {
+                namespace: &namespace,
+                track: &track,
+            },
+        )
+        .await;
+
+        assert!(
+            decision.is_allowed(),
+            "Fetch(7) grant must allow FETCH for a covered track"
+        );
+    }
+
+    /// A token with Fetch(7) for namespace A returns `ScopeMismatch` (NOT
+    /// `ActionAbsent`) when FETCH is requested for namespace B.  The
+    /// `token_has_action` function must see the Fetch(7) entry and emit the
+    /// correct reason so the Subscribe(4) fallback is suppressed.
+    #[tokio::test]
+    async fn fetch_wrong_namespace_yields_scope_mismatch_not_action_absent() {
+        let key = generate_key();
+        let hook = hook(vec![AuthPublicKey::es256(key.pem)]);
+
+        // Token grants Fetch(7) scoped to "sports/football" only.
+        let token_bytes = {
+            let fetch_scope = MoqtScopeBuilder::new()
+                .action(MoqtAction::Fetch)
+                .namespace_prefix(b"sports")
+                .namespace_prefix(b"football")
+                .track_prefix(b"")
+                .build();
+            let setup_scope = MoqtScopeBuilder::new()
+                .action(MoqtAction::ClientSetup)
+                .build();
+            let token = CatToken::new()
+                .with_issuer("test-issuer")
+                .with_single_audience("test-relay")
+                .with_subject("test-subject")
+                .with_expires_in(3600)
+                .with_moqt_scope(fetch_scope)
+                .with_moqt_scope(setup_scope);
+            Bytes::from(encode_token(&token, &key.signer).expect("encode"))
+        };
+        let principal = principal_for(&hook, token_bytes).await;
+
+        // Request FETCH for a different namespace — Fetch(7) present but wrong scope.
+        let wrong_namespace = TrackNamespace::from_utf8_path("news/politics");
+        let track = TrackName::from("video");
+
+        let decision = decide(
+            &hook,
+            &principal,
+            AuthzOperation::Fetch {
+                namespace: &wrong_namespace,
+                track: &track,
+            },
+        )
+        .await;
+
+        assert!(!decision.is_allowed(), "must deny for wrong namespace");
+        assert!(
+            matches!(decision.deny_reason(), Some(DenyReason::ScopeMismatch)),
+            "token has Fetch(7) but wrong scope → ScopeMismatch, not ActionAbsent; got {:?}",
+            decision.deny_reason()
+        );
+    }
+
+    /// A token that has Subscribe(4) but explicitly NO Fetch(7) returns
+    /// `ActionAbsent` for an `AuthzOperation::Fetch` request.  This is the
+    /// trigger for the v0.1 backward-compatibility fallback.
+    #[tokio::test]
+    async fn subscribe_only_token_yields_action_absent_for_fetch() {
+        let key = generate_key();
+        let hook = hook(vec![AuthPublicKey::es256(key.pem)]);
+
+        // Build a token with Subscribe(4) only — no Fetch(7).
+        let token_bytes = {
+            let sub_scope = MoqtScopeBuilder::new()
+                .action(MoqtAction::Subscribe)
+                .namespace_prefix(b"sports")
+                .track_prefix(b"")
+                .build();
+            let setup_scope = MoqtScopeBuilder::new()
+                .action(MoqtAction::ClientSetup)
+                .build();
+            let token = CatToken::new()
+                .with_issuer("test-issuer")
+                .with_single_audience("test-relay")
+                .with_subject("test-subject")
+                .with_expires_in(3600)
+                .with_moqt_scope(sub_scope)
+                .with_moqt_scope(setup_scope);
+            Bytes::from(encode_token(&token, &key.signer).expect("encode"))
+        };
+        let principal = principal_for(&hook, token_bytes).await;
+
+        let namespace = TrackNamespace::from_utf8_path("sports/football");
+        let track = TrackName::from("video");
+
+        let decision = decide(
+            &hook,
+            &principal,
+            AuthzOperation::Fetch {
+                namespace: &namespace,
+                track: &track,
+            },
+        )
+        .await;
+
+        assert!(!decision.is_allowed(), "must deny — token has no Fetch(7)");
+        assert!(
+            matches!(decision.deny_reason(), Some(DenyReason::ActionAbsent)),
+            "no Fetch(7) in token → ActionAbsent (v0.1 fallback trigger); got {:?}",
+            decision.deny_reason()
+        );
+    }
 }
