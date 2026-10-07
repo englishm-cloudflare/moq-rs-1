@@ -3097,10 +3097,11 @@ mod tests {
     }
 
     // ── FETCH bidi-stream lifecycle (B2, B3, decode_bidi_response) ───────────
-
-    /// Helper: open a FETCH bidi stream from `requester` toward `responder`
-    /// and run `handle_bidi_request` on the responder side.  Returns the
-    /// request writer, the response reader, and the handler join-handle.
+    //
+    // Full integration tests that run handle_bidi_request with FETCH_OK and
+    // FETCH_CANCEL are deferred to PR F2, when the publisher gains a real FETCH
+    // dispatch path.  The tests below verify the wire codec for each fix, which
+    // is the necessary precondition for the integration behaviour to be correct.
 
     /// B2: `encode_bidi_response_frame` produces a frame that `decode_bidi_response`
     /// recognises as FETCH_OK, and `is_terminal` is verified by checking that
@@ -3149,46 +3150,16 @@ mod tests {
         );
     }
 
-    /// B3: `read_request_follow_ups` routes FETCH_CANCEL to `OtherTerminal`.
+    /// B3 + decode_bidi_response: FETCH_CANCEL decodes without a session-fatal error.
     ///
-    /// The full handler integration test (where a live FETCH request is in
-    /// progress and FETCH_CANCEL causes the serving task to stop) is deferred
-    /// to PR F2.  Here we verify the decode path: decode_bidi_response must
-    /// parse FETCH_CANCEL without a session-fatal error, which is the
-    /// necessary precondition for the OtherTerminal branch in
-    /// read_request_follow_ups to be reachable.
+    /// `read_request_follow_ups` routes FETCH_CANCEL to `OtherTerminal` (the
+    /// `Message::FetchCancel(_) => Some(FollowupEnd::OtherTerminal)` arm added
+    /// by this fix).  That arm is only reachable if `decode_bidi_response` can
+    /// parse FETCH_CANCEL successfully — previously it hit the session-fatal
+    /// `unimplemented` arm.
     ///
-    /// See `decode_bidi_response_handles_fetch_cancel` below.
-    #[tokio::test]
-    async fn fetch_cancel_decode_is_prerequisite_for_other_terminal() {
-        // The OtherTerminal match is: Message::FetchCancel(_) => Some(OtherTerminal).
-        // If FetchCancel cannot be decoded (SIGSEGV/session-fatal), that branch
-        // is unreachable.  decode_bidi_response must return Ok(FetchCancel).
-        let (requester, responder) = test_support::loopback_session_pair().await;
-        let (send, recv) = requester.open_bi().await.unwrap();
-        let (_send, _recv) = responder.accept_bi().await.unwrap();
-
-        // Bidi-stream FetchCancel: type=0x17, length u16=0, no payload.
-        let mut writer = Writer::new(send);
-        writer.write(&[0x17u8, 0x00, 0x00]).await.unwrap();
-        drop(writer);
-
-        let mut reader = Reader::new(recv);
-        let msg = tokio::time::timeout(
-            std::time::Duration::from_secs(2),
-            Session::decode_bidi_response(&mut reader, 5),
-        )
-        .await
-        .unwrap()
-        .unwrap();
-
-        assert!(
-            matches!(msg, Message::FetchCancel(ref c) if c.id == 5),
-            "FetchCancel must decode from bidi stream; OtherTerminal branch needs this"
-        );
-    }
-
-    /// decode_bidi_response must decode FETCH_CANCEL without a session error.
+    /// Full integration (FETCH_CANCEL stopping a live serving task) is deferred
+    /// to PR F2 when the publisher gains a real FETCH handler.
     #[tokio::test]
     async fn decode_bidi_response_handles_fetch_cancel() {
         let (requester, responder) = test_support::loopback_session_pair().await;
