@@ -3192,18 +3192,21 @@ mod tests {
             params: KeyValuePairs::default(),
             track_extensions: Default::default(),
         }));
-        let mut fetch_ok = Some(fetch_ok);
-        for _ in 0..40 {
-            let tx = responses.lock().unwrap().get(&request_id).cloned();
-            if let Some(tx) = tx {
-                tx.send(fetch_ok.take().unwrap()).unwrap();
-                break;
+        let mut fetch_ok_cell = Some(fetch_ok);
+        let injection_result = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            loop {
+                let tx = responses.lock().unwrap().get(&request_id).cloned();
+                if let Some(tx) = tx {
+                    tx.send(fetch_ok_cell.take().unwrap()).unwrap();
+                    return;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
             }
-            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
-        }
+        })
+        .await;
         assert!(
-            fetch_ok.is_none(),
-            "bidi_response_map must have entry for request_id={request_id} after FETCH dispatch"
+            injection_result.is_ok(),
+            "bidi_response_map must have entry for request_id={request_id} within 2 s"
         );
 
         // The bidi response loop receives FetchOk.  B2 fix: is_terminal=true
