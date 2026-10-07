@@ -928,15 +928,29 @@ async fn may_fetch_track(
     )
     .await;
 
-    if fetch_result.is_ok() {
-        return fetch_result;
+    match fetch_result {
+        Ok(()) => return Ok(()),
+        // ScopeMismatch means the token contains a Fetch(7) scope, but its
+        // namespace/track predicate does not cover this track.  That is an
+        // explicit denial by the issuer; do NOT fall back to Subscribe(4),
+        // since the issuer clearly knows about Fetch(7) and chose not to grant
+        // it for this track.
+        Err(DenyReason::ScopeMismatch) => return Err(DenyReason::ScopeMismatch),
+        // Any non-scope error (HookFault, TokenExpired, etc.) is an
+        // infrastructure or token-validity problem; falling back would violate
+        // fail-closed semantics.  Return immediately.
+        Err(e) if !matches!(e, DenyReason::ActionAbsent) => return Err(e),
+        // ActionAbsent means the token has no Fetch(7) grant at all.  This is
+        // the only case where the v0.1 compatibility fallback applies: the
+        // issuer predates the Fetch(7) action and issued Subscribe(4) instead.
+        Err(DenyReason::ActionAbsent) => {}
     }
 
     // V0.1 fallback: Subscribe(4). Remove once issuers emit Fetch(7).
     tracing::debug!(
         namespace = %namespace.to_utf8_path(),
         track = %track.to_string_lossy(),
-        "FETCH denied under Fetch(7); retrying with Subscribe(4) v0.1 compatibility fallback"
+        "FETCH: Fetch(7) absent from token; retrying under Subscribe(4) v0.1 compatibility fallback"
     );
     authorize(
         auth,
@@ -1163,6 +1177,12 @@ mod tests {
         Ok(AuthDecision::deny(DenyReason::ScopeMismatch))
     }
 
+    /// Deny with `ActionAbsent` — simulates a token that has no grant of this
+    /// action type at all (the v0.1 fallback trigger).
+    fn absent() -> Result<AuthDecision, AuthError> {
+        Ok(AuthDecision::deny(DenyReason::ActionAbsent))
+    }
+
     fn fault() -> Result<AuthDecision, AuthError> {
         Err(AuthError::Backend("backend unavailable".to_string()))
     }
@@ -1172,6 +1192,10 @@ mod tests {
     }
 
     fn session_auth(hook: Arc<RecordingHook>) -> SessionAuth {
+        SessionAuth::new(hook, Principal::anonymous())
+    }
+
+    fn per_op_session_auth(hook: Arc<PerOpHook>) -> SessionAuth {
         SessionAuth::new(hook, Principal::anonymous())
     }
 
@@ -1293,7 +1317,7 @@ mod tests {
             "fetch" => allow(),
             _ => deny(),
         });
-        let auth = session_auth(hook.clone());
+        let auth = per_op_session_auth(hook.clone());
         let namespace = TrackNamespace::from_utf8_path("sports/football");
         let track = TrackName::from("video");
 
@@ -1308,16 +1332,17 @@ mod tests {
         );
     }
 
-    /// A token that grants only Subscribe(4) — not Fetch(7) — is still
-    /// accepted via the v0.1 compatibility fallback.  The hook sees "fetch"
-    /// first (denied), then "subscribe" (allowed).
+    /// A token with no Fetch(7) grant at all (`ActionAbsent`) falls back to
+    /// Subscribe(4).  The hook sees "fetch" first (absent), then "subscribe"
+    /// (allowed).
     #[tokio::test]
     async fn fetch_authorized_via_subscribe_compatibility_fallback() {
         let hook = PerOpHook::new(|op| match op {
+            "fetch" => absent(), // ActionAbsent → triggers fallback
             "subscribe" => allow(),
             _ => deny(),
         });
-        let auth = session_auth(hook.clone());
+        let auth = per_op_session_auth(hook.clone());
         let namespace = TrackNamespace::from_utf8_path("sports/football");
         let track = TrackName::from("video");
 
@@ -1332,12 +1357,16 @@ mod tests {
         );
     }
 
-    /// A token that grants neither Fetch(7) nor Subscribe(4) must deny FETCH.
-    /// Both operations are consulted and both denied.
+    /// A token that has NO Fetch(7) grant and no Subscribe(4) grant is denied.
+    /// Both operations are consulted: first Fetch(7) (absent), then Subscribe(4)
+    /// (denied).
     #[tokio::test]
     async fn fetch_denied_when_neither_fetch_nor_subscribe() {
-        let hook = PerOpHook::new(|_| deny());
-        let auth = session_auth(hook.clone());
+        let hook = PerOpHook::new(|op| match op {
+            "fetch" => absent(), // ActionAbsent → fallback attempted
+            _ => deny(),         // Subscribe(4) also denied
+        });
+        let auth = per_op_session_auth(hook.clone());
         let namespace = TrackNamespace::from_utf8_path("sports/football");
         let track = TrackName::from("video");
 
@@ -1347,75 +1376,63 @@ mod tests {
         assert_eq!(
             hook.seen(),
             vec!["fetch", "subscribe"],
-            "both Fetch(7) and Subscribe(4) fallback must be tried before denying"
+            "Fetch(7) absent → fallback attempted → Subscribe(4) also denied"
         );
     }
 
-    /// Fetch(7) is checked against the exact namespace and track from the
-    /// FETCH request.  A token scoped to a different namespace must be denied
-    /// even when the token would allow Fetch(7) for its own namespace.
+    /// A token that grants Fetch(7) for track A, but NOT for track B, must
+    /// deny FETCH for track B WITHOUT falling back to Subscribe(4).
+    ///
+    /// `ScopeMismatch` (Fetch(7) present in token but wrong scope) is the
+    /// definitive denial: the issuer explicitly configured Fetch(7) and
+    /// excluded this track.  Subscribe(4) must not be tried.
     #[tokio::test]
-    async fn fetch_namespace_constraint_respected() {
+    async fn fetch_denied_when_fetch_grant_present_but_wrong_scope() {
         let hook = PerOpHook::new(|op| match op {
-            // Allow nothing — hook records labels so we can assert what was tried.
+            "fetch" => deny(),      // ScopeMismatch — token has Fetch(7) but for another track
+            "subscribe" => allow(), // would allow Subscribe(4), but must not be reached
             _ => deny(),
         });
-        let auth = session_auth(hook.clone());
+        let auth = per_op_session_auth(hook.clone());
         let namespace = TrackNamespace::from_utf8_path("sports/football");
         let track = TrackName::from("video");
 
         let result = may_fetch_track(Some(&auth), &context(), &namespace, &track, 9).await;
 
-        assert!(result.is_err(), "denied namespace must deny FETCH");
-        // The namespace and track must appear in the first operation checked.
-        let seen = hook.seen();
-        assert_eq!(seen[0], "fetch", "Fetch(7) must be tried first");
+        assert!(result.is_err(), "ScopeMismatch must deny without fallback");
         assert_eq!(
-            seen[1], "subscribe",
-            "fallback must be tried after Fetch(7)"
+            hook.seen(),
+            vec!["fetch"],
+            "ScopeMismatch must stop immediately; Subscribe(4) fallback must NOT be tried"
         );
     }
 
-    /// Granting Fetch(7) for one track must not authorize FETCH for a
-    /// different track in the same namespace.
-    #[tokio::test]
-    async fn fetch_track_constraint_respected() {
-        // The hook denies everything; the important assertion is that the
-        // operation labels contain the correct track name.
-        let seen_labels: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
-        let seen_clone = seen_labels.clone();
-        let hook = PerOpHook::new(move |op| {
-            seen_clone.lock().unwrap().push(op.to_string());
-            deny()
-        });
-        let auth = session_auth(hook.clone());
-        let namespace = TrackNamespace::from_utf8_path("sports/football");
-        let track = TrackName::from("audio"); // different track
-
-        let result = may_fetch_track(Some(&auth), &context(), &namespace, &track, 9).await;
-
-        assert!(result.is_err(), "denied track must deny FETCH");
-    }
-
-    /// A denied FETCH must not reveal whether the track exists.  The hook
-    /// denies the request; the caller must not be told what is stored.
+    /// A denied FETCH must not reveal whether the track exists.  Even when the
+    /// token has no Fetch(7) grant and no Subscribe(4) grant, the error code
+    /// must not disclose track state.
     #[tokio::test]
     async fn fetch_denied_yields_no_existence_oracle() {
+        // ScopeMismatch on Fetch → immediate denial without Subscribe fallback.
         let hook = PerOpHook::new(|_| deny());
-        let auth = session_auth(hook.clone());
+        let auth = per_op_session_auth(hook.clone());
         let namespace = TrackNamespace::from_utf8_path("sports/football");
         let track = TrackName::from("video");
 
-        // `may_fetch_track` returns a DenyReason, not track-existence info.
         let err = may_fetch_track(Some(&auth), &context(), &namespace, &track, 9)
             .await
             .unwrap_err();
 
-        // The error is ScopeMismatch, not DoesNotExist or similar.
-        // `may_fetch_track` must not perform a track lookup before the auth check.
+        // Error is ScopeMismatch, not DoesNotExist or similar.
+        // `may_fetch_track` must not perform a track lookup before or after
+        // the auth check.
         assert!(
             matches!(err, DenyReason::ScopeMismatch),
-            "denied FETCH must return ScopeMismatch, not track existence info"
+            "denied FETCH must return ScopeMismatch, not track existence info; got {err}"
+        );
+        assert_eq!(
+            hook.seen(),
+            vec!["fetch"],
+            "must not ask Subscribe(4) either: ScopeMismatch is definitive"
         );
     }
 
@@ -1433,24 +1450,23 @@ mod tests {
         );
     }
 
-    /// The canonical test name retained for backward-compatibility with any
-    /// external tooling that references it by name.  Now verifies the correct
-    /// behavior: Fetch(7) is tried first, Subscribe(4) fallback second, and
-    /// the hook sees both in order when the hook denies Fetch(7).
+    /// Backward-compatibility alias: verifies that a token with ActionAbsent
+    /// for Fetch(7) and an allow for Subscribe(4) succeeds via the v0.1
+    /// fallback.  Retained by name for any tooling that references it.
     #[tokio::test]
     async fn fetch_is_authorized_as_subscribe() {
-        // Hook allows subscribe (fallback) but not fetch (primary).
         let hook = PerOpHook::new(|op| match op {
-            "subscribe" => allow(),
+            "fetch" => absent(),    // No Fetch(7) grant → triggers v0.1 fallback
+            "subscribe" => allow(), // Subscribe(4) allows
             _ => deny(),
         });
-        let auth = session_auth(hook.clone());
+        let auth = per_op_session_auth(hook.clone());
         let namespace = TrackNamespace::from_utf8_path("sports/football");
         let track = TrackName::from("video");
 
         may_fetch_track(Some(&auth), &context(), &namespace, &track, 9)
             .await
-            .expect("Subscribe(4) fallback must allow");
+            .expect("Subscribe(4) fallback must allow when Fetch(7) is absent");
 
         assert_eq!(
             hook.seen(),
@@ -1459,11 +1475,15 @@ mod tests {
         );
     }
 
-    /// A FETCH for a track outside the token's scope must be denied.
+    /// A FETCH for a track denied under both Fetch(7) (absent) and Subscribe(4)
+    /// must be withheld.
     #[tokio::test]
     async fn fetch_is_withheld_for_unauthorized_track() {
-        let hook = PerOpHook::new(|_| deny());
-        let auth = session_auth(hook.clone());
+        let hook = PerOpHook::new(|op| match op {
+            "fetch" => absent(), // ActionAbsent → fallback attempted
+            _ => deny(),         // Subscribe(4) also denied
+        });
+        let auth = per_op_session_auth(hook.clone());
         let namespace = TrackNamespace::from_utf8_path("sports/football");
         let track = TrackName::from("video");
 
@@ -1473,7 +1493,7 @@ mod tests {
         assert_eq!(
             hook.seen(),
             vec!["fetch", "subscribe"],
-            "both Fetch(7) and fallback must be tried before denying"
+            "Fetch(7) absent → fallback tried → Subscribe(4) also denied"
         );
     }
 

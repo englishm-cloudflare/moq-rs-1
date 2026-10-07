@@ -311,6 +311,21 @@ pub enum DenyReason {
     #[error("operation outside token scope")]
     ScopeMismatch,
 
+    /// The token grants no scope for this action type at all.
+    ///
+    /// Distinct from [`ScopeMismatch`]: `ScopeMismatch` means the action type
+    /// is present in the token but the namespace/track predicate does not match
+    /// this request.  `ActionAbsent` means the token contains no entry of this
+    /// action type anywhere — the issuer has not configured any grant for it.
+    ///
+    /// The distinction matters for backward-compatible fallbacks: a v0.1 token
+    /// that predates a distinct `Fetch` action will have `ActionAbsent` for
+    /// `Fetch(7)` and may be re-evaluated under `Subscribe(4)`.  A token that
+    /// explicitly grants `Fetch(7)` for a different namespace/track would
+    /// return `ScopeMismatch` instead, and the fallback must not apply to it.
+    #[error("action not present in token")]
+    ActionAbsent,
+
     /// The token was issued by an issuer this scope does not accept.
     #[error("issuer unknown")]
     IssuerUnknown,
@@ -356,6 +371,7 @@ impl DenyReason {
             Self::TokenReplayed => "token_replayed",
             Self::TokenMalformed => "token_malformed",
             Self::ScopeMismatch => "scope_mismatch",
+            Self::ActionAbsent => "action_absent",
             Self::IssuerUnknown => "issuer_unknown",
             Self::PolicyDenied { .. } => "policy_denied",
             Self::HookFault { .. } => "hook_fault",

@@ -463,13 +463,24 @@ impl CatAuthHook {
         if scope_authorizes(&principal.token, action, Some(&namespace), track.as_deref()) {
             AuthDecision::allow(established.clone())
         } else {
+            // Distinguish "action not in token at all" from "action present
+            // but namespace/track predicate does not match".  The fallback in
+            // `may_fetch_track` (Subscribe(4) compat) must only apply in the
+            // former case: a token that explicitly grants Fetch(7) for track A
+            // should not be upgraded to Subscribe(4) for track B.
+            let reason = if token_has_action(&principal.token, action) {
+                DenyReason::ScopeMismatch
+            } else {
+                DenyReason::ActionAbsent
+            };
             tracing::debug!(
                 scope = self.scope.as_deref().unwrap_or(UNSCOPED),
                 subject = principal.token.informational.sub.as_deref(),
                 operation = operation.label(),
-                "CAT authorization denied: operation outside token scope"
+                deny_reason = reason.label(),
+                "CAT authorization denied"
             );
-            AuthDecision::deny(DenyReason::ScopeMismatch)
+            AuthDecision::deny(reason)
         }
     }
 }
@@ -654,6 +665,23 @@ fn map_operation(operation: &AuthzOperation<'_>) -> (MoqtAction, Vec<Vec<u8>>, O
             Some(track.as_bytes().to_vec()),
         ),
     }
+}
+
+/// Whether `token` contains at least one scope that grants `action`, regardless
+/// of namespace or track predicates.
+///
+/// Used to distinguish [`DenyReason::ActionAbsent`] (no grant of this action
+/// type anywhere in the token) from [`DenyReason::ScopeMismatch`] (action
+/// present but the namespace/track predicate did not match this request).
+/// The distinction is load-bearing for the Subscribe(4) compatibility fallback
+/// in `may_fetch_track`: a token that explicitly grants `Fetch(7)` for one
+/// track must not be silently upgraded to `Subscribe(4)` for a different track.
+fn token_has_action(token: &CatToken, action: MoqtAction) -> bool {
+    token
+        .moqt
+        .moqt
+        .as_ref()
+        .is_some_and(|scopes| scopes.iter().any(|scope| scope.allows_action(&action)))
 }
 
 fn scope_authorizes(
