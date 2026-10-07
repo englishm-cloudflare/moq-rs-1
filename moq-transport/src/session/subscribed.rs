@@ -79,7 +79,7 @@ impl StreamCount {
     fn opened(&self) {
         let _ = self
             .0
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |count| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |count| {
                 count.checked_add(1)
             });
     }

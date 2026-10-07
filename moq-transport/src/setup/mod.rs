@@ -8,6 +8,7 @@
 //! unified SETUP message. Version negotiation is handled entirely by ALPN.
 
 mod param_types;
+#[allow(clippy::module_inception)]
 mod setup;
 mod version;
 

@@ -3103,52 +3103,138 @@ mod tests {
     // dispatch path.  The tests below verify the wire codec for each fix, which
     // is the necessary precondition for the integration behaviour to be correct.
 
-    /// B2: `encode_bidi_response_frame` handles `FetchOk` and the encoded frame
-    /// round-trips through `decode_bidi_response`.
+    /// B2: `FetchOk` in `is_terminal` — FINs the bidi stream after `FetchOk`.
     ///
-    /// Before this fix, `FetchOk` hit the `other => Err(Internal)` arm of
-    /// `encode_bidi_response_frame`.  This test confirms the new arm is present.
-    /// The handler-level test (verifying that `is_terminal` FINs the bidi stream
-    /// after FETCH_OK) is deferred to PR F2 when the publisher has a real FETCH
-    /// dispatch path.
+    /// The actual B2 fix is adding `Message::FetchOk(_)` to `is_terminal` in
+    /// the bidi response loop.  This test exercises the real lifecycle path:
+    ///
+    /// 1. Open a FETCH bidi stream through `handle_bidi_request`.
+    /// 2. The publisher stub calls `send_not_supported`, which sends
+    ///    `RequestError NOT_SUPPORTED` to the **control stream** (`self.outgoing`),
+    ///    NOT to `bidi_response_map`.  So the bidi response loop stays alive
+    ///    waiting on `rx.recv()`.
+    /// 3. We inject `FetchOk` via `bidi_response_map`.
+    /// 4. `is_terminal` fires → bidi send-half FINs → subscriber's bidi
+    ///    reader sees FIN (`done() == true`).
+    ///
+    /// Without the B2 fix, `FetchOk` is absent from `is_terminal`, the loop
+    /// does not FIN, and the handler occupies one of the 128 shared
+    /// `MAX_CONCURRENT_BIDI_STREAMS` slots until idle timeout.
     #[tokio::test]
-    async fn fetch_ok_encodes_and_decodes_as_bidi_response() {
+    async fn fetch_ok_in_is_terminal_fins_bidi_stream() {
         let (requester, responder) = test_support::loopback_session_pair().await;
-        let (send, recv) = requester.open_bi().await.unwrap();
-        let (_send, _recv) = responder.accept_bi().await.unwrap();
 
+        // Build a Publisher that handle_bidi_request can dispatch to.
+        let (outgoing, _outgoing_rx) = Queue::default().split();
+        let (bidi_task_tx, _bidi_task_rx) = tokio::sync::mpsc::unbounded_channel();
+        let request_ids = RequestId::new(1, 0); // server-side: odd IDs starting at 1
+        let publisher = Publisher::new(
+            outgoing,
+            responder.clone(),
+            None,
+            request_ids.clone(),
+            bidi_task_tx,
+        );
+        let responses = publisher.bidi_response_map.clone();
+
+        // Open a FETCH bidi stream from requester (client, even IDs).
         let request_id = 2u64;
-        let fetch_ok = Message::FetchOk(message::FetchOk {
-            id: request_id,
-            end_of_track: true,
-            end_location: crate::coding::Location::new(3, 7),
-            params: KeyValuePairs::default(),
-            track_extensions: Default::default(),
+        let (req_send, req_recv) = requester.open_bi().await.unwrap();
+        let mut req_writer = Writer::new(req_send);
+        req_writer
+            .encode(&Message::Fetch(message::Fetch {
+                id: request_id,
+                fetch_type: message::FetchType::Standalone,
+                standalone_fetch: Some(message::StandaloneFetch {
+                    track_namespace: crate::coding::TrackNamespace::from_utf8_path("test"),
+                    track_name: "track".into(),
+                    start_location: crate::coding::Location::new(0, 0),
+                    end_location: crate::coding::Location::new(1, 0),
+                }),
+                joining_fetch: None,
+                params: KeyValuePairs::default(),
+            }))
+            .await
+            .unwrap();
+        // Leave req_writer open — FETCH bidi streams may have FETCH_CANCEL follow-ups.
+        let mut response_reader = Reader::new(req_recv);
+
+        // Responder accepts the bidi stream; run handle_bidi_request in a task.
+        let (resp_send, resp_recv) = responder.accept_bi().await.unwrap();
+        let handler_pub = publisher.clone();
+        let handler_responses = responses.clone();
+        let handler_ids = request_ids.clone();
+        let handler = tokio::spawn(async move {
+            let mut pub_ = Some(handler_pub);
+            let mut sub_ = None;
+            Session::handle_bidi_request(
+                resp_send,
+                resp_recv,
+                &mut pub_,
+                &mut sub_,
+                &handler_ids,
+                &handler_responses,
+                None,
+            )
+            .await
         });
 
-        // encode_bidi_response_frame must handle FetchOk: before B2 it returned
-        // Err(SessionError::Internal) for this variant; if it does so now the fix regressed.
-        let frame = Session::encode_bidi_response_frame(&fetch_ok)
-            .expect("encode_bidi_response_frame must succeed for FetchOk");
+        // Wait until handle_bidi_request has processed the FETCH message and
+        // inserted a response channel into bidi_response_map.  The publisher
+        // stub (send_not_supported) sends RequestError to the control stream
+        // (self.outgoing), NOT to bidi_response_map, so the bidi loop stays
+        // alive waiting for our injection.
+        let fetch_ok = BidiResponse::new(Message::FetchOk(message::FetchOk {
+            id: request_id,
+            end_of_track: false,
+            end_location: crate::coding::Location::new(1, 0),
+            params: KeyValuePairs::default(),
+            track_extensions: Default::default(),
+        }));
+        let mut fetch_ok = Some(fetch_ok);
+        for _ in 0..40 {
+            let tx = responses.lock().unwrap().get(&request_id).cloned();
+            if let Some(tx) = tx {
+                tx.send(fetch_ok.take().unwrap()).unwrap();
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        assert!(
+            fetch_ok.is_none(),
+            "bidi_response_map must have entry for request_id={request_id} after FETCH dispatch"
+        );
 
-        let mut writer = Writer::new(send);
-        writer.write(&frame).await.unwrap();
-        drop(writer);
-
-        let mut reader = Reader::new(recv);
+        // The bidi response loop receives FetchOk.  B2 fix: is_terminal=true
+        // → handler FINs its bidi send-half.  The requester's reader sees FIN.
         let msg = tokio::time::timeout(
             std::time::Duration::from_secs(2),
-            Session::decode_bidi_response(&mut reader, request_id),
+            Session::decode_bidi_response(&mut response_reader, request_id),
         )
         .await
         .unwrap()
         .unwrap();
-
         assert!(
-            matches!(msg, Message::FetchOk(ref m) if m.id == request_id && m.end_of_track),
-            "expected FetchOk with id={request_id} and end_of_track=true, got {:?}",
-            msg
+            matches!(msg, Message::FetchOk(_)),
+            "requester must receive FetchOk on the bidi stream"
         );
+
+        let done = tokio::time::timeout(std::time::Duration::from_secs(2), response_reader.done())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            done,
+            "bidi stream send-half must FIN after FetchOk (B2: is_terminal=true)"
+        );
+
+        // Handler must exit cleanly — it does not leak the bidi slot.
+        drop(req_writer);
+        let result = tokio::time::timeout(std::time::Duration::from_secs(2), handler)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(result.is_ok(), "handler must exit cleanly after FetchOk");
     }
 
     /// B3 + decode_bidi_response: FETCH_CANCEL decodes without a session-fatal error.
@@ -3163,20 +3249,26 @@ mod tests {
     /// to PR F2 when the publisher gains a real FETCH handler.
     #[tokio::test]
     async fn decode_bidi_response_handles_fetch_cancel() {
+        // `decode_bidi_response` is called by `read_request_follow_ups` from
+        // the perspective of the ACCEPTOR (publisher side), reading from the
+        // INITIATOR's (subscriber's) send half.
+        //
+        // So: initiator opens bidi, WRITES FetchCancel on their send half;
+        // acceptor reads from their recv half via `decode_bidi_response`.
         let (requester, responder) = test_support::loopback_session_pair().await;
-        let (send, recv) = requester.open_bi().await.unwrap();
-        let (_send, _recv) = responder.accept_bi().await.unwrap();
+        let (initiator_send, _initiator_recv) = requester.open_bi().await.unwrap();
+        let (_acceptor_send, acceptor_recv) = responder.accept_bi().await.unwrap();
 
-        // Wire format for a bidi-framed FETCH_CANCEL (request ID omitted per
-        // draft-18 bidi-stream convention):
+        // Initiator (subscriber) writes FETCH_CANCEL as a bidi follow-up:
         //   - msg_type 0x17 as u64 QUIC varint (1 byte, 23 < 64)
         //   - payload length as u16 big-endian: 0x00 0x00
         //   - payload: empty (request ID injected from the reader's parameter)
-        let mut writer = Writer::new(send);
+        let mut writer = Writer::new(initiator_send);
         writer.write(&[0x17u8, 0x00, 0x00]).await.unwrap();
-        drop(writer);
+        drop(writer); // FIN
 
-        let mut reader = Reader::new(recv);
+        // Acceptor (publisher) reads via decode_bidi_response from their recv half.
+        let mut reader = Reader::new(acceptor_recv);
         let msg = tokio::time::timeout(
             std::time::Duration::from_secs(2),
             Session::decode_bidi_response(&mut reader, 4),

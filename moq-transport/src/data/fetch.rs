@@ -270,7 +270,7 @@ mod tests {
             publisher_priority: 128,
             extension_headers: KeyValuePairs::default(),
             payload_length: 0,
-            status: Some(ObjectStatus::Normal),
+            status: Some(ObjectStatus::NormalObject),
         };
 
         // Encode header_a + payload_a + header_b
@@ -318,7 +318,7 @@ mod tests {
             publisher_priority: 0,
             extension_headers: KeyValuePairs::default(),
             payload_length: 0,
-            status: Some(ObjectStatus::Normal),
+            status: Some(ObjectStatus::NormalObject),
         };
 
         let mut buf = bytes::BytesMut::new();
@@ -341,7 +341,7 @@ mod tests {
             publisher_priority: 0,
             extension_headers: KeyValuePairs::default(),
             payload_length: 0,
-            status: Some(ObjectStatus::Normal),
+            status: Some(ObjectStatus::NormalObject),
         });
         // The group_id must NOT equal obj_b.group_id (2) because payload bytes
         // were read as the varint instead of the actual group_id.
