@@ -96,7 +96,7 @@ struct SubscribeNamespaceCleanup {
 ///   calling [`await_stream`] removes the map entry and drops the `Sender`,
 ///   which signals the internal receiver with
 ///   [`RecvError`](tokio::sync::oneshot::error::RecvError) and drops it.
-/// * **External cancellation** (e.g. `BidiRequestCleanup` calling
+/// * **External cancellation** (e.g. the F3 outbound-FETCH Drop impl calling
 ///   [`cancel_fetch_stream`]): the Sender is removed and dropped, unblocking
 ///   [`await_stream`] with `Err`.  The guard's Drop then finds no entry to
 ///   remove — it is a no-op.
@@ -147,9 +147,13 @@ impl FetchStreamReg {
     pub(super) async fn await_stream(
         mut self,
     ) -> Result<Reader, tokio::sync::oneshot::error::RecvError> {
-        // rx is always Some at construction; consuming self means this is called
-        // at most once, so unwrap cannot panic.
-        let rx = self.rx.take().unwrap();
+        // rx is always Some at construction (register_fetch_stream always stores
+        // Some).  await_stream consumes self, so it cannot be called twice in
+        // safe Rust.  take() therefore always returns Some.
+        let rx = self
+            .rx
+            .take()
+            .expect("rx is always Some; await_stream is a consuming method");
         rx.await
         // self drops here → Drop removes map entry (no-op if route_fetch_stream
         // already consumed it; removes-then-drops Sender on the cancel path).

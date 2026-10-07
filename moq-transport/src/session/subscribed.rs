@@ -77,10 +77,10 @@ pub(super) struct StreamCount(Arc<AtomicU64>);
 
 impl StreamCount {
     fn opened(&self) {
-        // `fetch_update` was renamed to `try_update` in Rust 1.82.  The old
-        // name still compiles but triggers a deprecation lint.  The rename is
-        // a pure alias (no behaviour change); it will be updated across the
-        // whole codebase when the rename is swept in a dedicated commit.
+        // `fetch_update` triggers a deprecation lint with `-D warnings` on
+        // current toolchain.  The new name is `try_update` (pure alias, no
+        // behaviour change).  This targeted allow keeps the diff small;
+        // the rename will be swept codebase-wide in a dedicated commit.
         #[allow(deprecated)]
         let _ = self
             .0
