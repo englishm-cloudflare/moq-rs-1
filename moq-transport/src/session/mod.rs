@@ -3103,13 +3103,14 @@ mod tests {
     // dispatch path.  The tests below verify the wire codec for each fix, which
     // is the necessary precondition for the integration behaviour to be correct.
 
-    /// B2: `encode_bidi_response_frame` produces a frame that `decode_bidi_response`
-    /// recognises as FETCH_OK, and `is_terminal` is verified by checking that
-    /// FETCH_OK round-trips through the encode/decode path without error.
+    /// B2: `encode_bidi_response_frame` handles `FetchOk` and the encoded frame
+    /// round-trips through `decode_bidi_response`.
     ///
-    /// The full handler test is deferred to PR F2 (when the publisher has a
-    /// real FETCH dispatch path); here we verify the wire codec and that
-    /// `FetchOk` is present in `encode_bidi_response_frame`.
+    /// Before this fix, `FetchOk` hit the `other => Err(Internal)` arm of
+    /// `encode_bidi_response_frame`.  This test confirms the new arm is present.
+    /// The handler-level test (verifying that `is_terminal` FINs the bidi stream
+    /// after FETCH_OK) is deferred to PR F2 when the publisher has a real FETCH
+    /// dispatch path.
     #[tokio::test]
     async fn fetch_ok_encodes_and_decodes_as_bidi_response() {
         let (requester, responder) = test_support::loopback_session_pair().await;
@@ -3125,8 +3126,8 @@ mod tests {
             track_extensions: Default::default(),
         });
 
-        // encode_bidi_response_frame must handle FetchOk (it was a missing arm
-        // before B2; if this panics the fix regressed).
+        // encode_bidi_response_frame must handle FetchOk: before B2 it returned
+        // Err(SessionError::Internal) for this variant; if it does so now the fix regressed.
         let frame = Session::encode_bidi_response_frame(&fetch_ok)
             .expect("encode_bidi_response_frame must succeed for FetchOk");
 
