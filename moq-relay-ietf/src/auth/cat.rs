@@ -648,6 +648,11 @@ fn map_operation(operation: &AuthzOperation<'_>) -> (MoqtAction, Vec<Vec<u8>>, O
             namespace_tuple(namespace),
             Some(track.as_bytes().to_vec()),
         ),
+        AuthzOperation::Fetch { namespace, track } => (
+            MoqtAction::Fetch,
+            namespace_tuple(namespace),
+            Some(track.as_bytes().to_vec()),
+        ),
     }
 }
 

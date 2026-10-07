@@ -22,8 +22,8 @@
 //! * **Request.** Every SUBSCRIBE, SUBSCRIBE_NAMESPACE, TRACK_STATUS,
 //!   PUBLISH_NAMESPACE, PUBLISH and standalone FETCH is checked before the
 //!   relay acts on it. The first five use [`AuthHook::on_request`]; FETCH is
-//!   checked via `may_fetch_track` under the `Subscribe` grant (a standalone
-//!   FETCH retrieves track content and warrants the same authorization). A
+//!   checked via `may_fetch_track` under the `Fetch(7)` grant, with a
+//!   transitional fallback to `Subscribe(4)` for v0.1 issuers. A
 //!   denial rejects that request and leaves the session running.
 //!
 //! Cryptography is confined to setup. The identity established there is
