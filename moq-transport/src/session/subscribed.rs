@@ -77,9 +77,14 @@ pub(super) struct StreamCount(Arc<AtomicU64>);
 
 impl StreamCount {
     fn opened(&self) {
+        // `fetch_update` was renamed to `try_update` in Rust 1.82.  The old
+        // name still compiles but triggers a deprecation lint.  The rename is
+        // a pure alias (no behaviour change); it will be updated across the
+        // whole codebase when the rename is swept in a dedicated commit.
+        #[allow(deprecated)]
         let _ = self
             .0
-            .try_update(Ordering::Relaxed, Ordering::Relaxed, |count| {
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |count| {
                 count.checked_add(1)
             });
     }

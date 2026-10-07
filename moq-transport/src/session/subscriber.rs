@@ -77,36 +77,82 @@ struct SubscribeNamespaceCleanup {
     active: bool,
 }
 
-/// RAII guard for a FETCH data-stream routing entry.
+/// RAII registration for a FETCH data-stream routing entry.
 ///
-/// Created by [`Subscriber::register_fetch_stream`].  The paired
-/// [`tokio::sync::oneshot::Receiver<Reader>`] is returned alongside the guard;
-/// keeping them separate lets the F3 outbound-FETCH state machine hold both
-/// concurrently without lifetime entanglement.
+/// Created by [`Subscriber::register_fetch_stream`].  Owning this value is
+/// the *only* way to receive the FETCH data stream: the paired
+/// [`tokio::sync::oneshot::Receiver<Reader>`] is stored *inside* this type
+/// and is accessible only through [`await_stream`](Self::await_stream).
 ///
-/// # Lifecycle guarantee
+/// # Structural safety guarantee
 ///
-/// While the guard is alive, the routing entry — a `Sender<Reader>` in the
-/// subscriber's `fetch_streams` map — is guaranteed to be present (unless
-/// [`route_fetch_stream`](Subscriber::route_fetch_stream) already consumed it).
-/// On drop the guard removes the entry, dropping the `Sender` and signalling
-/// the receiver with [`RecvError`](tokio::sync::oneshot::error::RecvError).
+/// The routing entry (a `Sender<Reader>` in the subscriber's `fetch_streams`
+/// map) is cleaned up on every normal exit path:
 ///
-/// If [`route_fetch_stream`] delivered the data stream before the guard drops,
-/// the entry is already absent and the drop is a no-op.
+/// * **Data stream arrives**: [`route_fetch_stream`] consumes the map entry
+///   before delivering the `Reader` to [`await_stream`]'s oneshot receiver.
+///   The guard's [`Drop`] then finds nothing to remove — it is a no-op.
+/// * **Cancellation or session close**: dropping the `FetchStreamReg` without
+///   calling [`await_stream`] removes the map entry and drops the `Sender`,
+///   which signals the internal receiver with
+///   [`RecvError`](tokio::sync::oneshot::error::RecvError) and drops it.
+/// * **External cancellation** (e.g. `BidiRequestCleanup` calling
+///   [`cancel_fetch_stream`]): the Sender is removed and dropped, unblocking
+///   [`await_stream`] with `Err`.  The guard's Drop then finds no entry to
+///   remove — it is a no-op.
+///
+/// There is no way to lose the cleanup responsibility in safe code: the entry
+/// lives exactly as long as this value does.  (If the session mutex is
+/// poisoned — indicating a concurrent panic — the Drop silently skips removal;
+/// this is acceptable because the session is already in a broken state.)
+///
+/// [`route_fetch_stream`]: Subscriber::route_fetch_stream
+/// [`cancel_fetch_stream`]: Subscriber::cancel_fetch_stream
 pub(super) struct FetchStreamReg {
     fetch_streams: Arc<Mutex<HashMap<u64, tokio::sync::oneshot::Sender<Reader>>>>,
     request_id: u64,
+    /// Receiver for the data stream.  `Option` so `await_stream` can take it
+    /// without consuming `self`, leaving Drop to run cleanup normally.
+    #[allow(dead_code)] // only accessed via await_stream, which is called by F3
+    rx: Option<tokio::sync::oneshot::Receiver<Reader>>,
 }
 
 impl Drop for FetchStreamReg {
     fn drop(&mut self) {
-        // Remove and drop the Sender.  If the entry was already consumed by
-        // route_fetch_stream, this is a no-op; otherwise dropping the Sender
-        // unblocks the receiver with RecvError.
+        // Remove and drop the Sender.  If route_fetch_stream or
+        // cancel_fetch_stream already consumed the entry this is a no-op.
+        // Dropping the Sender also signals the receiver (if rx is still Some)
+        // with RecvError — but rx is None after await_stream() was called, so
+        // it is only reachable on the cancellation/drop path.
         if let Ok(mut map) = self.fetch_streams.lock() {
             map.remove(&self.request_id);
         }
+        // self.rx drops here (None after await_stream, Some on cancel path).
+    }
+}
+
+impl FetchStreamReg {
+    /// Await the FETCH data stream.
+    ///
+    /// Returns `Ok(reader)` when the publisher has opened a unidirectional data
+    /// stream and [`route_fetch_stream`](Subscriber::route_fetch_stream) routed
+    /// it here, or `Err` if the registration was cancelled (e.g. the bidi
+    /// control stream was reset, the session closed, or
+    /// [`cancel_fetch_stream`](Subscriber::cancel_fetch_stream) was called).
+    ///
+    /// The cleanup guarantee is maintained on every path through this method:
+    /// the `Drop` impl removes the map entry when `self` goes out of scope, and
+    /// `route_fetch_stream` removes it when the data stream is delivered.
+    #[allow(dead_code)] // called by the outbound FETCH state machine (PR F3)
+    pub(super) async fn await_stream(
+        mut self,
+    ) -> Result<Reader, tokio::sync::oneshot::error::RecvError> {
+        // rx is always Some at construction; consuming self means this is called
+        // at most once, so unwrap cannot panic.
+        let rx = self.rx.take().unwrap();
+        rx.await
+        // self drops here → Drop removes map entry (no-op if route_fetch_stream
+        // already consumed it; removes-then-drops Sender on the cancel path).
     }
 }
 
@@ -1746,46 +1792,41 @@ impl Subscriber {
     /// is always present when the publisher's unidirectional data stream
     /// arrives.
     ///
-    /// Returns a [`FetchStreamReg`] guard (which auto-cancels the entry on
-    /// drop) and the paired [`tokio::sync::oneshot::Receiver<Reader>`] that
-    /// resolves when the data stream is routed.  If the guard drops before
-    /// the stream arrives (because the FETCH was cancelled or failed), the
-    /// Sender is removed and the receiver resolves with `RecvError`.
+    /// Returns a [`FetchStreamReg`] that owns both the cleanup responsibility
+    /// and the stream receiver.  Call [`FetchStreamReg::await_stream`] to
+    /// receive the [`Reader`] when the data stream arrives.  Dropping the
+    /// registration before calling `await_stream` cancels the entry.
     ///
     /// # F3 usage pattern
     ///
     /// ```text
-    /// let (reg, rx) = subscriber.register_fetch_stream(id);
+    /// let reg = subscriber.register_fetch_stream(id);
     /// // open bidi stream, send FETCH message
-    /// match rx.await {
+    /// match reg.await_stream().await {
     ///     Ok(reader) => { /* consume object stream */ }
     ///     Err(_)     => { /* cancelled or session closed */ }
     /// }
-    /// // `reg` drops here, cancelling any still-live entry (no-op if already routed)
+    /// // reg's Drop removes the map entry on every path (no-op if already routed)
     /// ```
     #[allow(dead_code)] // called by the outbound FETCH state machine (PR F3)
-    pub(super) fn register_fetch_stream(
-        &self,
-        request_id: u64,
-    ) -> (FetchStreamReg, tokio::sync::oneshot::Receiver<Reader>) {
+    pub(super) fn register_fetch_stream(&self, request_id: u64) -> FetchStreamReg {
         let (tx, rx) = tokio::sync::oneshot::channel();
         match self.fetch_streams.lock() {
             Ok(mut map) => {
                 map.insert(request_id, tx);
             }
             Err(_) => {
-                // Lock is poisoned; tx is dropped here, so rx resolves
-                // immediately with RecvError — the caller treats that as
-                // cancellation, which is the correct behaviour when session
-                // state is corrupt.
+                // Lock is poisoned; tx is dropped here so rx resolves with
+                // RecvError immediately — the caller treats that as cancellation,
+                // which is correct when session state is corrupt.
                 tracing::error!(request_id, "fetch_streams lock poisoned during register");
             }
         }
-        let guard = FetchStreamReg {
+        FetchStreamReg {
             fetch_streams: Arc::clone(&self.fetch_streams),
             request_id,
-        };
-        (guard, rx)
+            rx: Some(rx),
+        }
     }
 
     /// Cancel the routing slot for a FETCH, signalling any waiter.
@@ -4674,64 +4715,90 @@ mod tests {
     }
 
     // ── FETCH data-stream routing ─────────────────────────────────────────────
+    //
+    // The tests below cover all structural safety paths of the FetchStreamReg
+    // API: the map entry is cleaned up on every exit regardless of whether the
+    // data stream arrived, was cancelled, or was externally invalidated.
 
-    /// `FetchStreamReg` guard drop cancels the map entry and signals the receiver.
+    /// Dropping a FetchStreamReg without calling await_stream cleans up the map
+    /// entry immediately.  A subsequent route_fetch_stream for the same ID
+    /// finds nothing and returns false.
     #[tokio::test]
-    async fn fetch_stream_reg_drop_cancels_entry_and_signals_receiver() {
-        let (session_a, _) = loopback_raw_session_pair().await;
+    async fn fetch_stream_reg_drop_cleans_up_map_entry() {
+        let (session_a, session_b) = loopback_raw_session_pair().await;
         let subscriber = test_subscriber(session_a);
 
-        let (reg, rx) = subscriber.register_fetch_stream(4);
+        let reg = subscriber.register_fetch_stream(4);
         assert_eq!(
             subscriber.fetch_streams.lock().unwrap().len(),
             1,
             "map must have one entry after register"
         );
 
-        // Dropping the guard removes the entry and drops the Sender.
+        // Drop without await: entry removed, Sender dropped.
         drop(reg);
 
         assert!(
             subscriber.fetch_streams.lock().unwrap().is_empty(),
             "map must be empty after guard drop"
         );
-        // The receiver must get an error because the Sender was dropped.
+
+        // A stream arriving after cancellation finds no entry.
+        let (send, recv) = session_b.open_bi().await.unwrap();
+        drop(send);
+        let routed = subscriber.route_fetch_stream(4, Reader::new(recv));
         assert!(
-            rx.await.is_err(),
-            "receiver must get RecvError after guard drop"
+            !routed,
+            "route_fetch_stream must return false after the reg was dropped"
         );
     }
 
-    /// `route_fetch_stream` delivers the Reader to the waiting receiver and
-    /// the guard's drop is a no-op (entry already consumed).
+    /// Calling await_stream delivers the Reader when route_fetch_stream ran first.
     #[tokio::test]
-    async fn fetch_stream_routing_delivers_reader_to_waiter() {
+    async fn fetch_stream_await_stream_delivers_reader_when_routed() {
         let (session_a, session_b) = loopback_raw_session_pair().await;
         let subscriber = test_subscriber(session_a);
 
-        let (reg, rx) = subscriber.register_fetch_stream(2);
+        let reg = subscriber.register_fetch_stream(2);
 
-        // Use a minimal bidi Reader to satisfy the API (channel semantics,
-        // not stream content, are under test here).
         let (send, recv) = session_b.open_bi().await.unwrap();
         drop(send);
-        let reader = Reader::new(recv);
+        let routed = subscriber.route_fetch_stream(2, Reader::new(recv));
+        assert!(routed, "route_fetch_stream must return true");
 
-        let routed = subscriber.route_fetch_stream(2, reader);
+        // await_stream resolves immediately because the channel is already filled.
+        let result = tokio::time::timeout(std::time::Duration::from_secs(2), reg.await_stream())
+            .await
+            .expect("timeout waiting for await_stream");
+        assert!(result.is_ok(), "await_stream must yield Ok(Reader)");
+
+        // reg dropped inside await_stream (map entry was already gone → no-op).
+        assert!(subscriber.fetch_streams.lock().unwrap().is_empty());
+    }
+
+    /// await_stream returns Err when the Sender is dropped externally — for
+    /// example when the session closes and cancel_fetch_stream is called.
+    #[tokio::test]
+    async fn fetch_stream_await_stream_errors_on_sender_cancel() {
+        let (session_a, _) = loopback_raw_session_pair().await;
+        let subscriber = test_subscriber(session_a);
+
+        let reg = subscriber.register_fetch_stream(4);
+
+        // Simulate session close / BidiRequestCleanup by cancelling externally.
+        subscriber.cancel_fetch_stream(4); // removes + drops the Sender
+
+        // await_stream should return Err (Sender was dropped).
+        let result = tokio::time::timeout(std::time::Duration::from_secs(2), reg.await_stream())
+            .await
+            .expect("timeout waiting for await_stream");
         assert!(
-            routed,
-            "route_fetch_stream must return true when a waiter is registered"
+            result.is_err(),
+            "await_stream must return Err when the Sender is dropped externally"
         );
 
-        let result = rx.await;
-        assert!(result.is_ok(), "fetch_stream receiver must get the Reader");
-
-        // Entry already removed by route_fetch_stream; guard drop is a no-op.
-        drop(reg);
-        assert!(
-            subscriber.fetch_streams.lock().unwrap().is_empty(),
-            "fetch_streams map must be empty after delivery"
-        );
+        // Map entry cleaned up by cancel_fetch_stream; reg's Drop is a no-op.
+        assert!(subscriber.fetch_streams.lock().unwrap().is_empty());
     }
 
     /// Routing without a registered waiter returns false and leaves the map empty.
@@ -4752,47 +4819,23 @@ mod tests {
         assert!(subscriber.fetch_streams.lock().unwrap().is_empty());
     }
 
-    /// Routing when the receiver has been dropped returns true (entry was
-    /// present) and removes the entry — guard drop is then a no-op.
-    #[tokio::test]
-    async fn fetch_stream_routing_after_receiver_dropped_returns_true() {
-        let (session_a, session_b) = loopback_raw_session_pair().await;
-        let subscriber = test_subscriber(session_a);
-
-        let (reg, rx) = subscriber.register_fetch_stream(6);
-        drop(rx); // drop receiver before stream arrives
-
-        let (send, recv) = session_b.open_bi().await.unwrap();
-        drop(send);
-        let reader = Reader::new(recv);
-
-        let routed = subscriber.route_fetch_stream(6, reader);
-        assert!(
-            routed,
-            "must be true: entry was present even though receiver dropped"
-        );
-        assert!(subscriber.fetch_streams.lock().unwrap().is_empty());
-        drop(reg); // no-op: entry already removed
-    }
-
     // ── recv_stream / is_fetch() uni-stream dispatch ──────────────────────────
 
     /// `recv_stream` routes a real unidirectional FETCH data stream to a
-    /// registered waiter via `is_fetch()` dispatch and `recv_fetch_stream`.
+    /// registered waiter via `is_fetch()` dispatch and `recv_fetch_stream`,
+    /// and `await_stream` resolves with the Reader.
     ///
-    /// This test exercises the full B1 dispatch path:
-    ///   peer opens uni-stream → write FetchHeader → subscriber.recv_stream
-    ///   → is_fetch() true → recv_fetch_stream → route_fetch_stream → rx.await
+    /// Exercises the full B1 dispatch path:
+    ///   peer opens uni-stream → FetchHeader → subscriber.recv_stream
+    ///   → is_fetch() → recv_fetch_stream → route_fetch_stream → await_stream
     #[tokio::test]
     async fn recv_stream_routes_fetch_data_stream_to_registered_waiter() {
         let (client, server) = loopback_raw_session_pair().await;
         let subscriber = test_subscriber(client.clone());
 
-        // Register the waiter for request_id = 4.
-        let (reg, rx) = subscriber.register_fetch_stream(4);
+        let reg = subscriber.register_fetch_stream(4);
 
-        // Server writes a valid FetchHeader (type=0x05, request_id=4) on a uni stream.
-        // Writer::new moves server_send; dropping server_writer FINs the stream.
+        // Server writes FetchHeader (type=0x05, request_id=4) on a uni stream.
         {
             use crate::coding::Encode;
             let header = crate::data::FetchHeader {
@@ -4804,39 +4847,33 @@ mod tests {
             let server_send = server.open_uni().await.unwrap();
             let mut server_writer = Writer::new(server_send);
             server_writer.write(&buf).await.unwrap();
-            // drop(server_writer) → SendStream drops → FIN
+            // drop → FIN
         }
 
-        // Client accepts the uni stream.
         let recv_stream = client.accept_uni().await.unwrap();
-
-        // run recv_stream (B1 fix: no longer hard-rejects Fetch streams)
         let result = Subscriber::recv_stream(subscriber.clone(), recv_stream).await;
         assert!(
             result.is_ok(),
             "recv_stream must succeed for a valid FetchHeader"
         );
 
-        // The registered waiter must have received the Reader.
-        let reader_result = tokio::time::timeout(std::time::Duration::from_secs(2), rx)
+        // await_stream resolves because recv_stream already called route_fetch_stream.
+        let reader = tokio::time::timeout(std::time::Duration::from_secs(2), reg.await_stream())
             .await
             .expect("timeout")
-            .expect("receiver must get the Reader");
+            .expect("await_stream must resolve with Ok(Reader)");
 
-        // Reader is valid (we don't need to read objects in this test).
-        drop(reader_result);
-        drop(reg); // no-op: route_fetch_stream already removed the entry
+        drop(reader);
         assert!(subscriber.fetch_streams.lock().unwrap().is_empty());
     }
 
     /// `recv_stream` discards a FETCH data stream when no waiter is registered
-    /// (unknown request ID sent by a misbehaving peer or already-cancelled FETCH).
+    /// (unknown request ID or already-cancelled FETCH).
     #[tokio::test]
     async fn recv_stream_discards_fetch_stream_with_no_registered_waiter() {
         let (client, server) = loopback_raw_session_pair().await;
         let subscriber = test_subscriber(client.clone());
 
-        // No register_fetch_stream call — request_id 8 has no waiter.
         {
             use crate::coding::Encode;
             let header = crate::data::FetchHeader {
@@ -4852,39 +4889,32 @@ mod tests {
         }
 
         let recv_stream = client.accept_uni().await.unwrap();
-
-        // recv_stream must succeed (no-waiter is not a fatal error).
         let result = Subscriber::recv_stream(subscriber.clone(), recv_stream).await;
         assert!(
             result.is_ok(),
-            "recv_stream must not error when no waiter is registered for a FETCH stream"
+            "no-waiter discard must not be a session error"
         );
         assert!(subscriber.fetch_streams.lock().unwrap().is_empty());
     }
 
-    /// `recv_stream` returns an error when the FETCH data stream's header is
-    /// truncated (the server writes the stream-type byte then closes without
-    /// the request-id varint).
+    /// `recv_stream` returns an error when the FETCH data stream header is
+    /// truncated (type byte only, no request-id varint).
     #[tokio::test]
     async fn recv_stream_errors_on_truncated_fetch_header() {
         let (client, server) = loopback_raw_session_pair().await;
         let subscriber =
             test_subscriber_for_transport(client.clone(), super::super::Transport::RawQuic);
 
-        // Write only the stream-type byte (0x05 = Fetch) without the request_id varint.
-        // drop(server_writer) → FIN, subscriber reads EOF mid-header → DecodeError::More.
         let server_send = server.open_uni().await.unwrap();
         let mut server_writer = Writer::new(server_send);
         server_writer.write(&[0x05u8]).await.unwrap();
-        drop(server_writer); // FIN without request_id → truncated header
+        drop(server_writer); // FIN before request_id → truncated header
 
         let recv_stream = client.accept_uni().await.unwrap();
-
-        // recv_stream must return Err because the header is incomplete.
         let result = Subscriber::recv_stream(subscriber, recv_stream).await;
         assert!(
             result.is_err(),
-            "recv_stream must error on a truncated FETCH header (missing request_id)"
+            "truncated FETCH header must return Err (DecodeError::More)"
         );
     }
 }
