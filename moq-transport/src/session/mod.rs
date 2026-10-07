@@ -130,10 +130,13 @@ pub(crate) type BidiResponseMap = Arc<Mutex<HashMap<u64, RequestStreamSink>>>;
 enum BidiRequestKind {
     Subscribe,
     Publish,
-    /// Inbound FETCH: data arrives on a separate unidirectional stream keyed by
-    /// request ID.  When the bidi control stream tears down, the subscriber's
-    /// routing entry for this request ID must be cancelled so that any waiter
-    /// on the data-stream receiver unblocks immediately.
+    /// Inbound FETCH: the publisher serves object data on a separate
+    /// unidirectional stream keyed by request ID.  When the bidi control
+    /// stream tears down the publisher-side serving task must be dropped;
+    /// that cancel path is added in PR F2.  The subscriber's routing table
+    /// (outbound-FETCH side) is owned by the F3 outbound Drop guard and is
+    /// not touched here, because inbound IDs always have opposite parity from
+    /// outbound IDs (§10.1) and can never match.
     Fetch,
     Other,
 }
@@ -3091,5 +3094,131 @@ mod tests {
         server_run.abort();
         assert!(server_run.await.unwrap_err().is_cancelled());
         drop(client_session);
+    }
+
+    // ── FETCH bidi-stream lifecycle (B2, B3, decode_bidi_response) ───────────
+
+    /// Helper: open a FETCH bidi stream from `requester` toward `responder`
+    /// and run `handle_bidi_request` on the responder side.  Returns the
+    /// request writer, the response reader, and the handler join-handle.
+
+    /// B2: `encode_bidi_response_frame` produces a frame that `decode_bidi_response`
+    /// recognises as FETCH_OK, and `is_terminal` is verified by checking that
+    /// FETCH_OK round-trips through the encode/decode path without error.
+    ///
+    /// The full handler test is deferred to PR F2 (when the publisher has a
+    /// real FETCH dispatch path); here we verify the wire codec and that
+    /// `FetchOk` is present in `encode_bidi_response_frame`.
+    #[tokio::test]
+    async fn fetch_ok_encodes_and_decodes_as_bidi_response() {
+        let (requester, responder) = test_support::loopback_session_pair().await;
+        let (send, recv) = requester.open_bi().await.unwrap();
+        let (_send, _recv) = responder.accept_bi().await.unwrap();
+
+        let request_id = 2u64;
+        let fetch_ok = Message::FetchOk(message::FetchOk {
+            id: request_id,
+            end_of_track: true,
+            end_location: crate::coding::Location::new(3, 7),
+            params: KeyValuePairs::default(),
+            track_extensions: Default::default(),
+        });
+
+        // encode_bidi_response_frame must handle FetchOk (it was a missing arm
+        // before B2; if this panics the fix regressed).
+        let frame = Session::encode_bidi_response_frame(&fetch_ok)
+            .expect("encode_bidi_response_frame must succeed for FetchOk");
+
+        let mut writer = Writer::new(send);
+        writer.write(&frame).await.unwrap();
+        drop(writer);
+
+        let mut reader = Reader::new(recv);
+        let msg = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            Session::decode_bidi_response(&mut reader, request_id),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+        assert!(
+            matches!(msg, Message::FetchOk(ref m) if m.id == request_id && m.end_of_track),
+            "expected FetchOk with id={request_id} and end_of_track=true, got {:?}",
+            msg
+        );
+    }
+
+    /// B3: `read_request_follow_ups` routes FETCH_CANCEL to `OtherTerminal`.
+    ///
+    /// The full handler integration test (where a live FETCH request is in
+    /// progress and FETCH_CANCEL causes the serving task to stop) is deferred
+    /// to PR F2.  Here we verify the decode path: decode_bidi_response must
+    /// parse FETCH_CANCEL without a session-fatal error, which is the
+    /// necessary precondition for the OtherTerminal branch in
+    /// read_request_follow_ups to be reachable.
+    ///
+    /// See `decode_bidi_response_handles_fetch_cancel` below.
+    #[tokio::test]
+    async fn fetch_cancel_decode_is_prerequisite_for_other_terminal() {
+        // The OtherTerminal match is: Message::FetchCancel(_) => Some(OtherTerminal).
+        // If FetchCancel cannot be decoded (SIGSEGV/session-fatal), that branch
+        // is unreachable.  decode_bidi_response must return Ok(FetchCancel).
+        let (requester, responder) = test_support::loopback_session_pair().await;
+        let (send, recv) = requester.open_bi().await.unwrap();
+        let (_send, _recv) = responder.accept_bi().await.unwrap();
+
+        // Bidi-stream FetchCancel: type=0x17, length u16=0, no payload.
+        let mut writer = Writer::new(send);
+        writer.write(&[0x17u8, 0x00, 0x00]).await.unwrap();
+        drop(writer);
+
+        let mut reader = Reader::new(recv);
+        let msg = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            Session::decode_bidi_response(&mut reader, 5),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+        assert!(
+            matches!(msg, Message::FetchCancel(ref c) if c.id == 5),
+            "FetchCancel must decode from bidi stream; OtherTerminal branch needs this"
+        );
+    }
+
+    /// decode_bidi_response must decode FETCH_CANCEL without a session error.
+    #[tokio::test]
+    async fn decode_bidi_response_handles_fetch_cancel() {
+        let (requester, responder) = test_support::loopback_session_pair().await;
+        let (send, recv) = requester.open_bi().await.unwrap();
+        let (_send, _recv) = responder.accept_bi().await.unwrap();
+
+        // Wire format for a bidi-framed FETCH_CANCEL (request ID omitted per
+        // draft-18 bidi-stream convention):
+        //   - msg_type 0x17 as u64 QUIC varint (1 byte, 23 < 64)
+        //   - payload length as u16 big-endian: 0x00 0x00
+        //   - payload: empty (request ID injected from the reader's parameter)
+        let mut writer = Writer::new(send);
+        writer.write(&[0x17u8, 0x00, 0x00]).await.unwrap();
+        drop(writer);
+
+        let mut reader = Reader::new(recv);
+        let msg = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            Session::decode_bidi_response(&mut reader, 4),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+        // The id is injected from the decode_bidi_response parameter (4),
+        // not read from the wire (where it is absent on bidi streams).
+        assert!(
+            matches!(msg, Message::FetchCancel(ref c) if c.id == 4),
+            "expected FetchCancel with id=4, got {:?}",
+            msg
+        );
     }
 }

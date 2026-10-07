@@ -1751,9 +1751,14 @@ impl Subscriber {
     /// parity from inbound IDs per §10.1.
     #[allow(dead_code)] // called by the outbound FETCH Drop impl (PR F3)
     pub(super) fn cancel_fetch_stream(&self, request_id: u64) {
-        if let Ok(mut map) = self.fetch_streams.lock() {
-            map.remove(&request_id);
-            // Dropping the Sender signals the Receiver.
+        match self.fetch_streams.lock() {
+            Ok(mut map) => {
+                map.remove(&request_id);
+                // Dropping the Sender signals the Receiver.
+            }
+            Err(_) => {
+                tracing::error!(request_id, "fetch_streams lock poisoned during cancel");
+            }
         }
     }
 
