@@ -1723,19 +1723,33 @@ impl Subscriber {
         request_id: u64,
     ) -> tokio::sync::oneshot::Receiver<Reader> {
         let (tx, rx) = tokio::sync::oneshot::channel();
-        if let Ok(mut map) = self.fetch_streams.lock() {
-            map.insert(request_id, tx);
+        match self.fetch_streams.lock() {
+            Ok(mut map) => {
+                map.insert(request_id, tx);
+            }
+            Err(_) => {
+                // Lock is poisoned; the Sender is dropped here, so the
+                // returned Receiver resolves immediately with RecvError.
+                // The caller treats RecvError as cancellation, which is the
+                // correct behaviour when session state is corrupt.
+                tracing::error!(request_id, "fetch_streams lock poisoned during register");
+            }
         }
         rx
     }
 
     /// Cancel the routing slot for a FETCH, signalling any waiter.
     ///
-    /// Called from [`crate::session::BidiRequestCleanup`] when the FETCH bidi
-    /// control stream tears down, and from the outbound-FETCH Drop impl (PR F3).
-    /// Dropping the sender causes the receiver to get
-    /// [`tokio::sync::oneshot::error::RecvError`], which the waiter interprets
-    /// as cancellation.
+    /// Called from the outbound-FETCH Drop impl (PR F3) to ensure the routing
+    /// entry is cleaned up on every exit path.  Dropping the sender causes the
+    /// receiver to get [`tokio::sync::oneshot::error::RecvError`], which the
+    /// waiter interprets as cancellation.
+    ///
+    /// Note: [`crate::session::BidiRequestCleanup`] for an inbound FETCH (the
+    /// publisher side) does NOT call this.  The routing table lives on the
+    /// session that *sent* the FETCH, whose request IDs always have opposite
+    /// parity from inbound IDs per §10.1.
+    #[allow(dead_code)] // called by the outbound FETCH Drop impl (PR F3)
     pub(super) fn cancel_fetch_stream(&self, request_id: u64) {
         if let Ok(mut map) = self.fetch_streams.lock() {
             map.remove(&request_id);
@@ -1745,9 +1759,13 @@ impl Subscriber {
 
     /// Route an incoming unidirectional FETCH data stream to its waiting receiver.
     ///
-    /// Returns `true` if a waiter was found and the stream was delivered,
-    /// `false` if no waiter is registered (unexpected stream from the peer —
-    /// the caller logs and discards).
+    /// Returns `true` if a routing entry for `request_id` was present (it is
+    /// then removed), `false` if no entry exists.  A `true` result does not
+    /// guarantee the receiver is still alive: if the receiver was dropped before
+    /// the stream arrived (e.g. the FETCH was cancelled client-side), the
+    /// stream is discarded after a debug log but the return value is still
+    /// `true` because the entry existed.  Callers should treat `true` as
+    /// "entry was present" rather than "stream was successfully delivered".
     fn route_fetch_stream(&self, request_id: u64, reader: Reader) -> bool {
         let sender = match self.fetch_streams.lock() {
             Ok(mut map) => map.remove(&request_id),
