@@ -489,6 +489,7 @@ mod tests {
             DenyReason::TokenReplayed,
             DenyReason::TokenMalformed,
             DenyReason::ScopeMismatch,
+            DenyReason::ActionAbsent,
             DenyReason::IssuerUnknown,
             DenyReason::PolicyDenied {
                 message: "unenforceable claim: cnf".to_string(),
@@ -515,6 +516,7 @@ mod tests {
         assert_eq!(DenyReason::TokenMissing.request_error_code(), 0x1);
         assert_eq!(DenyReason::TokenInvalid.request_error_code(), 0x1);
         assert_eq!(DenyReason::ScopeMismatch.request_error_code(), 0x1);
+        assert_eq!(DenyReason::ActionAbsent.request_error_code(), 0x1);
         assert_eq!(DenyReason::IssuerUnknown.request_error_code(), 0x1);
         assert_eq!(DenyReason::TokenReplayed.request_error_code(), 0x1);
     }
