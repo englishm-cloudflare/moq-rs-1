@@ -189,10 +189,11 @@ impl Producer {
             },
         };
 
-        // Authorize before any lookup: a standalone FETCH retrieves track
-        // content and requires the same Subscribe grant as a SUBSCRIBE for the
-        // same track. Deciding afterwards would make response timing an
-        // existence oracle for tracks the peer may not access.
+        // Authorize before any lookup: deciding afterwards would make response
+        // timing an existence oracle for tracks the peer may not access.
+        // Authorization checks Fetch(7) first; Subscribe(4) is accepted as a
+        // backward-compatible fallback only when the token has no Fetch(7)
+        // scope at all. See `may_fetch_track` for the two-step logic.
         if let Err(reason) = may_fetch_track(
             self.auth.as_ref(),
             &self.context,
@@ -903,6 +904,12 @@ fn upstream_fetch_params(
 /// accepted when `Fetch(7)` is absent. The fallback is logged at `debug`
 /// level so it is observable in relay logs.
 ///
+/// **Metric note.** When `ActionAbsent` is emitted and the Subscribe(4)
+/// fallback then succeeds, the session auth layer has already incremented
+/// `moq_relay_auth_denied_total{operation="fetch", reason="action_absent"}`.
+/// That counter accurately reflects that `Fetch(7)` was not present in the
+/// token; use `reason != "action_absent"` to filter for true denials.
+///
 /// **Removal.** Delete the fallback block once all pilots have updated their
 /// issuers to include `Fetch(7)` in FETCH-capable tokens. The compile-time
 /// exhaustiveness of [`map_operation`] ensures the forward path (`Fetch(7)`)
@@ -1450,50 +1457,33 @@ mod tests {
         );
     }
 
-    /// Backward-compatibility alias: verifies that a token with ActionAbsent
-    /// for Fetch(7) and an allow for Subscribe(4) succeeds via the v0.1
-    /// fallback.  Retained by name for any tooling that references it.
+    /// A hook fault on the Fetch(7) check must be fail-closed: the Subscribe(4)
+    /// fallback must NOT be attempted, and only "fetch" appears in the log.
+    /// This pins that the fallback guard (`ActionAbsent` only) holds for hook
+    /// infrastructure failures as well as ordinary scope denials.
     #[tokio::test]
-    async fn fetch_is_authorized_as_subscribe() {
+    async fn fetch_hookfault_does_not_fall_back_to_subscribe() {
         let hook = PerOpHook::new(|op| match op {
-            "fetch" => absent(),    // No Fetch(7) grant → triggers v0.1 fallback
-            "subscribe" => allow(), // Subscribe(4) allows
+            "fetch" => fault(),     // HookFault — infrastructure error on Fetch(7) probe
+            "subscribe" => allow(), // poison pill — must never be reached
             _ => deny(),
         });
         let auth = per_op_session_auth(hook.clone());
         let namespace = TrackNamespace::from_utf8_path("sports/football");
         let track = TrackName::from("video");
 
-        may_fetch_track(Some(&auth), &context(), &namespace, &track, 9)
+        let err = may_fetch_track(Some(&auth), &context(), &namespace, &track, 9)
             .await
-            .expect("Subscribe(4) fallback must allow when Fetch(7) is absent");
+            .unwrap_err();
 
-        assert_eq!(
-            hook.seen(),
-            vec!["fetch", "subscribe"],
-            "Fetch(7) tried first, Subscribe(4) fallback second"
+        assert!(
+            matches!(err, DenyReason::HookFault { .. }),
+            "HookFault must propagate immediately; got {err}"
         );
-    }
-
-    /// A FETCH for a track denied under both Fetch(7) (absent) and Subscribe(4)
-    /// must be withheld.
-    #[tokio::test]
-    async fn fetch_is_withheld_for_unauthorized_track() {
-        let hook = PerOpHook::new(|op| match op {
-            "fetch" => absent(), // ActionAbsent → fallback attempted
-            _ => deny(),         // Subscribe(4) also denied
-        });
-        let auth = per_op_session_auth(hook.clone());
-        let namespace = TrackNamespace::from_utf8_path("sports/football");
-        let track = TrackName::from("video");
-
-        let result = may_fetch_track(Some(&auth), &context(), &namespace, &track, 9).await;
-
-        assert!(result.is_err(), "unauthorized FETCH must be denied");
         assert_eq!(
             hook.seen(),
-            vec!["fetch", "subscribe"],
-            "Fetch(7) absent → fallback tried → Subscribe(4) also denied"
+            vec!["fetch"],
+            "HookFault must not trigger the Subscribe(4) fallback"
         );
     }
 

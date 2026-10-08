@@ -150,8 +150,10 @@ impl fmt::Debug for Principal {
 /// Standalone and joining FETCH are not separate variants: `serve_fetch`
 /// calls `fetch.resolve()` which converts both forms to a `StandaloneFetch`
 /// range, then authorises via `AuthzOperation::Fetch` with the resolved
-/// namespace and track. FETCH retrieves the same track content a SUBSCRIBE
-/// does and warrants the same grant.
+/// namespace and track. FETCH is authorized under `Fetch(7)` (CAT action) as
+/// the primary grant; a `Subscribe(4)` grant is accepted as a backward-
+/// compatible fallback only when the token carries no `Fetch(7)` scope at
+/// all (`DenyReason::ActionAbsent`).
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum AuthzOperation<'a> {
@@ -179,7 +181,7 @@ pub enum AuthzOperation<'a> {
         track: &'a TrackName,
     },
 
-    /// Inbound standalone FETCH (§8.x).
+    /// Inbound standalone FETCH (draft-16 §9.7).
     ///
     /// FETCH retrieves a bounded range of archived track content.  It is
     /// distinct from SUBSCRIBE (which delivers live, unbounded content) and
