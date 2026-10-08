@@ -79,12 +79,10 @@ struct SubscribeNamespaceCleanup {
 
 /// Inner cleanup guard for a FETCH data-stream routing entry.
 ///
-/// Removing the Sender from `fetch_streams` is expressed as a `Drop` impl on
-/// this separate, non-`async` type so that [`FetchStreamReg`] does not need a
-/// `Drop` impl of its own.  Without an own `Drop`, Rust's ownership rules allow
-/// `FetchStreamReg` to be destructured by value in an async fn — `let Self {
-/// _cleanup, rx } = self` — moving `rx` directly without an `Option` wrapper
-/// and without any `.take()`/`.expect()` call in production code.
+/// Placing the `Drop` impl on this inner type — rather than on [`FetchStreamReg`]
+/// itself — lets `FetchStreamReg` be destructured by value in an async fn
+/// (`let Self { _cleanup, rx } = self`), moving `rx` directly without any
+/// `Option`/`take()`/`expect()` indirection in production code.
 struct FetchStreamCleanup {
     fetch_streams: Arc<Mutex<HashMap<u64, tokio::sync::oneshot::Sender<Reader>>>>,
     request_id: u64,
@@ -92,9 +90,10 @@ struct FetchStreamCleanup {
 
 impl Drop for FetchStreamCleanup {
     fn drop(&mut self) {
-        // Remove and drop the Sender.  If route_fetch_stream or
-        // cancel_fetch_stream already removed the entry this is a no-op.
-        // Dropping the Sender signals the paired Receiver with RecvError.
+        // Remove and drop the Sender.  If route_fetch_stream or cancel_fetch_stream
+        // already removed the entry this is a no-op.  Dropping the Sender signals
+        // the paired Receiver with RecvError when await_stream is concurrently
+        // suspended.
         if let Ok(mut map) = self.fetch_streams.lock() {
             map.remove(&self.request_id);
         }
@@ -111,23 +110,19 @@ impl Drop for FetchStreamCleanup {
 /// # Structural safety guarantee
 ///
 /// The routing entry (a `Sender<Reader>` in the subscriber's `fetch_streams`
-/// map) is cleaned up on every terminal path by [`FetchStreamCleanup`]'s `Drop`:
+/// map) **cannot outlive this value**: Rust's ownership ensures
+/// `FetchStreamCleanup::drop` fires whenever `FetchStreamReg` drops, which
+/// removes the entry.  The four terminal paths are:
 ///
-/// * **REQUEST_ERROR or FETCH_CANCEL** (FETCH bidi terminates before data
-///   stream arrives): the F3 outbound-FETCH code sees the bidi response, drops
-///   `FetchStreamReg` → `FetchStreamCleanup::drop` removes the entry → Sender
-///   dropped → any concurrent `await_stream` returns `Err`.
-/// * **Session close** (task holding `FetchStreamReg` is cancelled): same as
-///   above — `FetchStreamReg` drops with the task → cleanup fires.
-/// * **Data stream arrives** (normal terminal): [`route_fetch_stream`] removes
-///   the entry *before* delivering the `Reader`; `FetchStreamCleanup::drop`
-///   then finds nothing to remove — it is a no-op.
-/// * **`cancel_fetch_stream`** (defensive explicit cancel from bidi cleanup):
-///   removes the entry and drops the Sender; `FetchStreamCleanup::drop` is again
-///   a no-op because the entry is already gone.
-///
-/// There is no way to lose the cleanup responsibility in safe Rust: the entry
-/// lives exactly as long as the `FetchStreamCleanup` inside this value.
+/// * **Data stream arrives** (normal): [`route_fetch_stream`] removes the
+///   entry before delivering the `Reader`; `FetchStreamCleanup::drop` then
+///   finds nothing to remove — it is a no-op.
+/// * **REQUEST_ERROR or FETCH_CANCEL**: the F3 outbound-FETCH state machine
+///   receives the bidi response and drops `FetchStreamReg` → cleanup fires.
+/// * **Session close** (task cancelled): `FetchStreamReg` drops with the
+///   task → cleanup fires.
+/// * **Explicit cancel** ([`cancel_fetch_stream`]): removes the entry and
+///   drops the Sender first; `FetchStreamCleanup::drop` is then a no-op.
 ///
 /// [`route_fetch_stream`]: Subscriber::route_fetch_stream
 /// [`cancel_fetch_stream`]: Subscriber::cancel_fetch_stream
@@ -140,12 +135,12 @@ impl FetchStreamReg {
     /// Await the FETCH data stream.
     ///
     /// Returns `Ok(reader)` when [`route_fetch_stream`](Subscriber::route_fetch_stream)
-    /// delivered the data-stream `Reader`, or `Err` if the registration was
-    /// cancelled before the stream arrived (REQUEST_ERROR, FETCH_CANCEL, session
-    /// close, or explicit [`cancel_fetch_stream`](Subscriber::cancel_fetch_stream)).
+    /// delivered the data-stream `Reader`, or `Err` when the Sender was already
+    /// dropped before (or during) the wait — for example by an explicit call to
+    /// [`cancel_fetch_stream`](Subscriber::cancel_fetch_stream).
     ///
-    /// Cleanup is guaranteed on every path: `_cleanup` drops at the end of
-    /// this function regardless of whether the call succeeded or failed.
+    /// The map entry is cleaned up on every exit: `_cleanup` drops when this
+    /// function returns, removing any still-live entry (no-op if already gone).
     #[allow(dead_code)] // called by the outbound FETCH state machine (PR F3)
     pub(super) async fn await_stream(
         self,
@@ -468,11 +463,12 @@ pub struct Subscriber {
     /// in its header — the stream routing loop calls [`Self::route_fetch_stream`]
     /// to hand the `Reader` to the waiting receiver.
     ///
-    /// When a FETCH ends without a data stream (REQUEST_ERROR, FETCH_CANCEL,
-    /// session close, or explicit [`Self::cancel_fetch_stream`]), the entry is
-    /// removed by whichever of these fires first.  The [`FetchStreamCleanup`]
-    /// guard inside the [`FetchStreamReg`] removes any still-live entry on drop,
-    /// ensuring no entry outlives its registration.
+    /// When the FETCH completes normally, [`Self::route_fetch_stream`] removes
+    /// the entry.  When the FETCH is abandoned (REQUEST_ERROR, FETCH_CANCEL,
+    /// session shutdown), the F3 state machine drops the [`FetchStreamReg`];
+    /// [`FetchStreamCleanup::drop`] then removes the entry automatically.
+    /// [`Self::cancel_fetch_stream`] may also remove an entry explicitly.
+    /// An entry cannot outlive its [`FetchStreamReg`] owner.
     fetch_streams: Arc<Mutex<HashMap<u64, tokio::sync::oneshot::Sender<Reader>>>>,
 
     /// The queue we will write any outbound control messages we want to send, the session run_send task
@@ -1836,16 +1832,19 @@ impl Subscriber {
 
     /// Cancel the routing slot for a FETCH, signalling any waiter.
     ///
-    /// Called from the outbound-FETCH Drop impl (PR F3) to ensure the routing
-    /// entry is cleaned up on every exit path.  Dropping the sender causes the
-    /// receiver to get [`tokio::sync::oneshot::error::RecvError`], which the
-    /// waiter interprets as cancellation.
+    /// Explicitly cancel a pending FETCH data-stream registration.
     ///
-    /// Note: [`crate::session::BidiRequestCleanup`] for an inbound FETCH (the
-    /// publisher side) does NOT call this.  The routing table lives on the
-    /// session that *sent* the FETCH, whose request IDs always have opposite
-    /// parity from inbound IDs per §10.1.
-    #[allow(dead_code)] // called by the outbound FETCH Drop impl (PR F3)
+    /// Removes the routing entry and drops the Sender, causing any concurrent
+    /// [`FetchStreamReg::await_stream`] call to return
+    /// `Err(RecvError)`.  If no registration exists for `request_id` (already
+    /// consumed by [`route_fetch_stream`](Self::route_fetch_stream) or by
+    /// [`FetchStreamCleanup::drop`]) this is a no-op.
+    ///
+    /// Normally cleanup happens automatically via [`FetchStreamCleanup::drop`]
+    /// when the owning [`FetchStreamReg`] goes out of scope.  This function is
+    /// useful when external code (e.g. the F3 outbound-FETCH Drop impl) needs to
+    /// signal cancellation before the registration drops naturally.
+    #[allow(dead_code)] // used by F3 outbound-FETCH Drop impl and tests
     pub(super) fn cancel_fetch_stream(&self, request_id: u64) {
         match self.fetch_streams.lock() {
             Ok(mut map) => {
@@ -4721,17 +4720,17 @@ mod tests {
 
     // ── FETCH data-stream routing: lifecycle path tests ──────────────────────
     //
-    // Every terminal path for an outbound FETCH must clean the fetch_streams
-    // entry so the map never grows unboundedly.  The FetchStreamCleanup inner
-    // Drop guard guarantees this structurally: the entry lives exactly as long
-    // as the FetchStreamReg that owns it.
+    // FetchStreamCleanup::drop guarantees that no entry outlives its
+    // FetchStreamReg.  When FetchStreamReg drops (for any reason), the entry
+    // is removed and the Sender is dropped, signalling the Receiver.
     //
     // Terminal paths tested here:
-    //   (a) Normal: data stream arrives  → await_stream Ok, entry removed by route
-    //   (b) REQUEST_ERROR/session-close  → F3 drops FetchStreamReg → entry removed
-    //   (c) FETCH_CANCEL / bidi cleanup  → cancel_fetch_stream called → Sender
-    //       dropped → await_stream Err, entry removed by cancel
-    //   (d) No waiter (stream for unknown ID) → route returns false, map untouched
+    //   (a) Normal: data stream arrives  → await_stream Ok, route removes entry
+    //   (b) REQUEST_ERROR / caller drop / session-close → F3 drops FetchStreamReg
+    //       → FetchStreamCleanup::drop removes entry (no leak)
+    //   (c) Explicit cancel (F3 FETCH_CANCEL path) → cancel_fetch_stream removes
+    //       entry → Sender dropped → await_stream Err
+    //   (d) No waiter (stream for unknown/already-cancelled ID) → route false
 
     /// (a) Normal terminal: data stream arrives, await_stream returns Ok, map clean.
     #[tokio::test]
@@ -4785,19 +4784,18 @@ mod tests {
         );
     }
 
-    /// (c) FETCH_CANCEL or bidi-cleanup terminal: cancel_fetch_stream drops the
-    /// Sender (wired from BidiRequestCleanup::Fetch and the F3 outbound Drop),
-    /// and await_stream returns Err.
+    /// (c) Explicit-cancel terminal: the F3 FETCH_CANCEL path calls
+    /// cancel_fetch_stream, which drops the Sender → await_stream returns Err.
     #[tokio::test]
-    async fn fetch_stream_cleaned_on_fetch_cancel_or_bidi_cleanup() {
+    async fn fetch_stream_cleaned_on_explicit_cancel() {
         let (session_a, _) = loopback_raw_session_pair().await;
         let subscriber = test_subscriber(session_a);
 
         let reg = subscriber.register_fetch_stream(4);
         assert_eq!(subscriber.fetch_streams.lock().unwrap().len(), 1);
 
-        // BidiRequestCleanup::Fetch (or explicit cancel from F3 FETCH_CANCEL path)
-        // calls cancel_fetch_stream → removes entry → Sender dropped.
+        // F3 FETCH_CANCEL handling calls cancel_fetch_stream to signal the
+        // Receiver (e.g. when a FETCH_CANCEL message is received from the peer).
         subscriber.cancel_fetch_stream(4);
 
         assert!(

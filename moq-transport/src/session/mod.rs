@@ -131,16 +131,13 @@ enum BidiRequestKind {
     Subscribe,
     Publish,
     /// Inbound FETCH: the publisher serves object data on a separate
-    /// unidirectional stream keyed by request ID.  When the bidi control
-    /// stream tears down:
+    /// unidirectional stream keyed by request ID.
     ///
-    /// * `cancel_fetch_stream(id)` is called defensively on the subscriber's
-    ///   routing table.  For inbound FETCHes this is always a no-op: inbound
-    ///   IDs have opposite parity from outbound-FETCH registrations (§10.1).
-    ///   For sessions that also issue outbound FETCHes on the same request-ID
-    ///   space (future), this wiring ensures those registrations are cancelled.
-    /// * The publisher-side serving task cancel is added in PR F2
-    ///   (`publisher.cancel_fetch(id)`).
+    /// When the bidi control stream tears down, the outbound-FETCH routing
+    /// table on the subscriber side is not touched: inbound IDs have opposite
+    /// parity from any outbound-FETCH registration (§10.1), so any lookup
+    /// would find nothing.  The publisher-side serving-task cancel is added
+    /// in PR F2.
     Fetch,
     Other,
 }
@@ -177,18 +174,11 @@ impl Drop for BidiRequestCleanup {
                 }
             }
             BidiRequestKind::Fetch => {
-                // Cancel any pending outbound-FETCH data-stream registration for
-                // this request ID.  For inbound FETCHes (the common case here)
-                // this is a no-op: outbound IDs always have opposite parity from
-                // inbound IDs (§10.1), so the lookup finds nothing.  When the
-                // session also issues outbound FETCHes on the same bidi handler
-                // path this wiring ensures their registrations are cleaned up
-                // when the bidi stream tears down.
-                if let Some(subscriber) = &self.subscriber {
-                    subscriber.cancel_fetch_stream(self.id);
-                }
-                // Publisher-side serving task cancel is added in PR F2
-                // (`publisher.cancel_fetch(self.id)`).
+                // Inbound FETCH (this session is the publisher): the data-stream
+                // routing table lives on the session that *sent* the FETCH
+                // (outbound side), whose IDs always have opposite parity from
+                // inbound IDs per §10.1 — no outbound registration to cancel.
+                // Publisher-side serving-task cancel is added in PR F2.
             }
             BidiRequestKind::Other => {}
         }
@@ -3296,64 +3286,5 @@ mod tests {
             "expected FetchCancel with id=4, got {:?}",
             msg
         );
-    }
-
-    /// `BidiRequestCleanup::Fetch` calls `cancel_fetch_stream` when the bidi
-    /// handler exits, wiring the bidi-teardown → fetch-registration cleanup path.
-    ///
-    /// In normal use the inbound FETCH ID has opposite parity from any outbound
-    /// registration, so the cancel is a no-op.  This test uses matching IDs to
-    /// prove the wiring fires.  The test constructs a cleanup directly (the way
-    /// `handle_bidi_request` creates one internally) and drops it.
-    #[test]
-    fn bidi_request_cleanup_fetch_cancels_fetch_stream_registration() {
-        // We need a real session handle to build a Subscriber.  Use a stub QUIC
-        // endpoint rather than a full loopback to keep this synchronous.
-        // The bidi_response_map and outgoing queue are thin wrappers; the
-        // cancel_fetch_stream call only touches fetch_streams under a Mutex.
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-
-        rt.block_on(async {
-            let (session_a, _session_b) = test_support::loopback_raw_session_pair().await;
-            let (outgoing, _rx) = Queue::default().split();
-            let (bidi_task_tx, _bidi_task_rx) =
-                tokio::sync::mpsc::unbounded_channel::<super::BidiReaderFuture>();
-            let request_ids = RequestId::new(0, 1); // client parity
-            let subscriber = Subscriber::new(
-                outgoing,
-                session_a,
-                super::Transport::WebTransport,
-                None,
-                request_ids,
-                bidi_task_tx,
-                Default::default(),
-            );
-
-            // Register an outbound FETCH for request_id = 2.
-            let reg = subscriber.register_fetch_stream(2);
-
-            // BidiRequestCleanup::Fetch wiring: construct and drop the cleanup.
-            // Dropping it must call cancel_fetch_stream(2) on the subscriber.
-            let cleanup = BidiRequestCleanup {
-                id: 2,
-                kind: BidiRequestKind::Fetch,
-                publisher: None,
-                subscriber: Some(subscriber.clone()),
-                responses: Default::default(),
-            };
-            drop(cleanup); // fires cancel_fetch_stream(2)
-
-            // Verify via observable behaviour: await_stream returns Err because
-            // cancel_fetch_stream dropped the Sender.  (Checking fetch_streams
-            // directly would require accessing a private field from mod.rs.)
-            let result =
-                tokio::time::timeout(std::time::Duration::from_secs(2), reg.await_stream())
-                    .await
-                    .expect("timeout");
-            assert!(result.is_err(), "await_stream must Err after bidi cleanup");
-        });
     }
 }
