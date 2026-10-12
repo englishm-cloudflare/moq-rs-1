@@ -1,0 +1,21 @@
+moq-transport/src/session/mod.rs
+  s_02a6aafb608dd3::t_2bc21cbfa13982 272-279,382-400,627-629,637,682,783-794,898
+moq-transport/src/mlog/events.rs
+  s_02a6aafb608dd3::t_ee0712b31a9897 173-178,182,186-201,890-913
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "22aecefa5b8736e2d4b1f5587e8fb5daffa842e9",
+  "prompts": {},
+  "sessions": {
+    "s_02a6aafb608dd3": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_ecdbc9f84ffejOqvaJIl0IO2j3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
