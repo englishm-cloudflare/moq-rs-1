@@ -1,0 +1,48 @@
+moq-relay-ietf/src/producer.rs
+  s_02a6aafb608dd3::t_44aeb50af53596 20,26-27,203-206,234-245,252,263,1763-1769,1773,1775,2535
+moq-relay-ietf/src/relay.rs
+  s_02a6aafb608dd3::t_43b2be5cb5a97d 13,93-235,243-246,311,319,331,392-424,439-440,449,524,587,636-668,678,684,728-997
+moq-relay-ietf/src/auth/session.rs
+  s_02a6aafb608dd3::t_d7df393f9abbca 1-231
+moq-relay-ietf/src/auth/hook.rs
+  s_02a6aafb608dd3::t_604e016049d98b 6-7,12-16,20-27,29,36-37,49-56,62,64-69,74-78,82-83,87,89-94,98-107,113-118,122,129-130,132-133,137,139,141-144,146,148-150,154,158-171,173,175-178,180-181
+moq-relay-ietf/src/auth/mod.rs
+  s_02a6aafb608dd3::t_53b7524f0ea3a6 4,6,8-14,16,18-25,27-33,37-84,86-90,92-93,95,97-110
+moq-relay-ietf/src/coordinator.rs
+  s_02a6aafb608dd3::t_d1d2162092a9e5 5,211,213-215,217-241,243-377
+moq-relay-ietf/README.md
+  s_02a6aafb608dd3::t_97ab5595ecf521 18-23
+moq-relay-ietf/src/auth/token.rs
+  s_02a6aafb608dd3::t_481c780ab832ef 4-5,7-74
+moq-relay-ietf/src/consumer.rs
+  s_02a6aafb608dd3::t_8b480606d3dfe3 15,102-105,110-119,126,135
+moq-relay-ietf/src/metrics.rs
+  s_02a6aafb608dd3::t_2e0d1db4dd7dfd 25,40-41,83,152-160
+moq-relay-ietf/src/auth/scope.rs
+  s_02a6aafb608dd3::t_0040679165c814 4-13,15-20,22-30,32-36,38-43,46-55,57-65,67-119,121,124-134,137-146,148-160,165-182,187-191,193-220,224-257,260-273,276-278,280-282,284-287,289-292,294-335,339-343,345-352,355-366,369-385,388-401,404-415,417-422,424-487
+Cargo.lock
+  s_02a6aafb608dd3::t_3380bd75ae5597 1110,1349,1691,1732,2224-2231
+  s_02a6aafb608dd3::t_f5941cf3d53480 2232
+moq-relay-ietf/Cargo.toml
+  s_02a6aafb608dd3::t_dfcaf77329ad34 31-35
+moq-relay-ietf/src/auth/types.rs
+  s_02a6aafb608dd3::t_a47dc528a049f7 4-6,9-10,12-14,16-17,19-57,59-66,68-69,71-83,85,87-163,168-169,174-178,183,185-189,195-196,201-202,204,209-221,224,226-227,231,233-235,238,240-242,245,247,250-254,258,260-262,265-279,282-287,290-291,293-296,298-300,302,304,307-321,323-325,327-328,330-334,337-347,350-362,366-377,381,383-386,390-393,395-398,400-405,413-420,423-425,427-430,434-438,442-450,454-464,467-468,470-492,496-505
+moq-relay-ietf/src/lib.rs
+  s_02a6aafb608dd3::t_c51f6132028bfb 37,52,57-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "b2382dda047d0f70a541b015b33bb75b663d14cc",
+  "prompts": {},
+  "sessions": {
+    "s_02a6aafb608dd3": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_ecdbc9f84ffejOqvaJIl0IO2j3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
