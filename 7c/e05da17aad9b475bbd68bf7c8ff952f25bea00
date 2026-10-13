@@ -1,0 +1,21 @@
+moq-relay-ietf/README.md
+  s_02a6aafb608dd3::t_5096b7dd67b278 21
+moq-relay-ietf/src/auth/scope.rs
+  s_02a6aafb608dd3::t_bf5e658953575d 20-29,136-138,140,147-156,158,166-173,515-563
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "7ce05da17aad9b475bbd68bf7c8ff952f25bea00",
+  "prompts": {},
+  "sessions": {
+    "s_02a6aafb608dd3": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_ecdbc9f84ffejOqvaJIl0IO2j3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
