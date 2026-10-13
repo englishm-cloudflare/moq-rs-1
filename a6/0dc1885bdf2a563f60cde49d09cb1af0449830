@@ -1,0 +1,41 @@
+Cargo.lock
+  s_2c2086499a360a::t_6e5c3b870a0ea0 1669
+dev/README.md
+  s_2c2086499a360a::t_f4a19cfc1bf32f 78-86
+moq-clock-ietf/Cargo.toml
+  s_2c2086499a360a::t_9799b24f16a438 31
+moq-clock-ietf/src/cli.rs
+  s_2c2086499a360a::t_82269ecde85286 4,6,9-39,73-127
+moq-clock-ietf/src/main.rs
+  s_2c2086499a360a::t_e326195ac78e8f 18,37-42,61-64,101-104
+moq-relay-ietf/src/bin/moq-relay-ietf/main.rs
+  s_2c2086499a360a::t_956c88e38642c6 283-466
+moq-transport/src/session/mod.rs
+  s_2c2086499a360a::t_b9c745340e262a 54,710-742,747,792-798
+moq-transport/src/session/publisher.rs
+  s_2c2086499a360a::t_6ec9cd8eeba913 254-264
+moq-transport/src/session/subscriber.rs
+  s_2c2086499a360a::t_4c5c1fe2ff8191 494-504
+moq-transport/src/setup/authorization_token.rs
+  s_2c2086499a360a::t_88ce397d4f4b41 1-131
+moq-transport/src/setup/mod.rs
+  s_2c2086499a360a::t_a6562f9feca66f 11,19
+moq-transport/src/setup/setup.rs
+  s_2c2086499a360a::t_6d55607b93ac42 19-20,36-60,143-176
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "a60dc1885bdf2a563f60cde49d09cb1af0449830",
+  "prompts": {},
+  "sessions": {
+    "s_2c2086499a360a": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_ecb43cabbffeVlXs1XglGCVvfg",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
