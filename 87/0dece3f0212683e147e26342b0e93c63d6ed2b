@@ -1,0 +1,19 @@
+moq-transport/src/session/published_namespace.rs
+  s_02a6aafb608dd3::t_acdc5dee7d8278 142-172,388-417
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "870dece3f0212683e147e26342b0e93c63d6ed2b",
+  "prompts": {},
+  "sessions": {
+    "s_02a6aafb608dd3": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_ecdbc9f84ffejOqvaJIl0IO2j3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
