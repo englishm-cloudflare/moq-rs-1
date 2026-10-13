@@ -1,0 +1,31 @@
+moq-relay-ietf/README.md
+  s_02a6aafb608dd3::t_4c4f405bd6e6fb 21,24-27
+Cargo.lock
+  s_02a6aafb608dd3::t_7361c198a50404 20-54,149-157,164-169,295-300,307-312,342-350,369-398,453-489,570-575,602-610,626-663,699-728,739-750,763-776,783-802,837-846,853-858,871-876,997-1028,1056-1065,1078-1088,1108-1118,1131,1140-1148,1161-1169,1386-1394,1470-1472,1524-1532,1729-1731,1742,1870-1885,1901-1910,1930,1948-1953,1966-1977,2017-2025,2064-2096,2125-2133,2486-2495,2510-2540,2757-2770,2914-2924,2942-2952,2977-2986,3037-3052,3184-3204,3380-3385,3407-3416,3449,3618,3994-4005,4040-4053
+moq-relay-ietf/src/relay.rs
+  s_02a6aafb608dd3::t_b95661b72ef1cf 956-959,998-1066
+moq-relay-ietf/src/auth/mod.rs
+  s_02a6aafb608dd3::t_5bd4f2454ed25c 92-94,101-103
+moq-relay-ietf/src/auth/cat.rs
+  s_02a6aafb608dd3::t_d29ffc7a618d14 1-3246
+moq-relay-ietf/Cargo.toml
+  s_02a6aafb608dd3::t_438ba524220080 36-46,90,97-99,104-107
+moq-relay-ietf/src/auth/scope.rs
+  s_02a6aafb608dd3::t_e3ee8d69787432 199-213,252-258,300,302-314,361-362,455-457,590-657
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "790f6dbb7c2e6d5e9de9e9b4736846bbb402af21",
+  "prompts": {},
+  "sessions": {
+    "s_02a6aafb608dd3": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_ecdbc9f84ffejOqvaJIl0IO2j3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
