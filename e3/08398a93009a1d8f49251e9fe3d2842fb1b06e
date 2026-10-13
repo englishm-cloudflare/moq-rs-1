@@ -1,0 +1,38 @@
+moq-test-client/src/main.rs
+  s_574508651c5dcb::t_030a39a5d13d2e 31-36,110-112,143,166,190-192,209,221,255-276,295-296,307-310,315,323-325,335-337
+AGENTS.md
+  s_574508651c5dcb::t_6f1154a4761fa7 7,22
+moq-test-client/README.md
+  s_574508651c5dcb::t_6f1154a4761fa7 56-67,122
+moq-test-client/src/moqtest.rs
+  s_574508651c5dcb::t_e928f9c80c77b7 581-605
+  s_574508651c5dcb::t_21638bb4aaaa8f 1244,2435-2437
+  s_574508651c5dcb::t_4681aad580aa20 1681-1682,1686,1726-1728,1731-1733,1735,1737,1752,1772,1781-1783,1785-1787,1791-1793,1796-1819,1821-1827
+  s_574508651c5dcb::t_229ccd17fc2c01 271-299
+  s_574508651c5dcb::t_910026b0800b8b 2443-2447,2449
+  s_574508651c5dcb::t_ac05a05459b1a7 1770-1771,1784,2416-2434,2438-2442,2448,2450-2502,2517-2526
+  s_574508651c5dcb::t_570b9e149145af 1582-1680,1683-1685,1687-1725,1729-1730,1734,1736,1740-1751,1753-1769,1773-1780,1788-1790,1794-1795,1820,1828-1852
+  s_574508651c5dcb::t_cbc62efb61ee5c 830-842,1030-1039,1097,1122,1494-1501
+  s_574508651c5dcb::t_11dc5768650940 57-60,62
+  s_574508651c5dcb::t_3deb602d53ee18 54,56,61,63,1738-1739,1853
+Cargo.lock
+  s_574508651c5dcb::t_d6cb963c4de42e 1387
+moq-test-client/Cargo.toml
+  s_574508651c5dcb::t_41b5a91e356659 27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "e308398a93009a1d8f49251e9fe3d2842fb1b06e",
+  "prompts": {},
+  "sessions": {
+    "s_574508651c5dcb": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_ecdc821efffetXZEUZ2rzduEQH",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
