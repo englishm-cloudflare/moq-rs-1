@@ -1,0 +1,45 @@
+moq-relay-ietf/src/bin/moq-relay-ietf/api_coordinator.rs
+  s_2c2086499a360a::t_7065c3e5370506 127-128
+  s_01a1f6dfa33eb0::t_236bda4b879f46 14,26,29-30,178-188,324-327
+moq-relay-ietf/src/bin/moq-relay-ietf/scope_config.rs
+  s_2c2086499a360a::t_5a3df0ba00042c 410-412
+  s_2c2086499a360a::t_492a8270dc4c7a 1-409,413-482,484-516,521,525-527,529-535,537-540,542-611
+  s_2c2086499a360a::t_3f52a105186f99 483
+  s_2c2086499a360a::t_93737ce00d3307 517-519
+  s_2c2086499a360a::t_8d79cd195dd703 520,522-524,528,536,541
+  s_2c2086499a360a::t_a5ef919c7f140d 612-1252
+Dockerfile
+  s_2c2086499a360a::t_0549f767c29221 16-19,22
+moq-relay-ietf/Cargo.toml
+  s_2c2086499a360a::t_422909f9c51b3f 75
+moq-relay-ietf/README.md
+  s_2c2086499a360a::t_fa14499cd58e07 25,28-79
+moq-relay-ietf/src/bin/moq-relay-ietf/file_coordinator.rs
+  s_2c2086499a360a::t_b4c416ef90ecd4 14,26-27,30-31,295-296,309,312-317,748-751
+moq-relay-ietf/src/bin/moq-relay-ietf/main.rs
+  s_2c2086499a360a::t_9abfb40c6d0c41 6,106-116,135-138,209,214-216
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "08b79550aed00b918ec8b8fd3cfd212ce8160367",
+  "prompts": {},
+  "sessions": {
+    "s_01a1f6dfa33eb0": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_ecb3de613ffeb8XFgaol7oCGlF",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    },
+    "s_2c2086499a360a": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_ecb43cabbffeVlXs1XglGCVvfg",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
