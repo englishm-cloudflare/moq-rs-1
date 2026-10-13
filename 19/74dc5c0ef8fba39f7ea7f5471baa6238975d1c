@@ -1,0 +1,19 @@
+moq-relay-ietf/src/bin/moq-relay-ietf/scope_config.rs
+  s_2c2086499a360a::t_f8f1990b82b1c5 414-422,494-496
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "1974dc5c0ef8fba39f7ea7f5471baa6238975d1c",
+  "prompts": {},
+  "sessions": {
+    "s_2c2086499a360a": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_ecb43cabbffeVlXs1XglGCVvfg",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
