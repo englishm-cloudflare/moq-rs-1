@@ -1,0 +1,21 @@
+moq-transport/src/data/fetch.rs
+  s_f3e473a86290f3::t_788a2ee4576f2f 325-330
+moq-transport/src/session/mod.rs
+  s_f3e473a86290f3::t_344268d9b45af2 1356-1360
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "54b6e86c6689c48891ff1b3998a5341c155062ee",
+  "prompts": {},
+  "sessions": {
+    "s_f3e473a86290f3": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_ec6dc9b26ffex4HCmbxsO2bq12",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
