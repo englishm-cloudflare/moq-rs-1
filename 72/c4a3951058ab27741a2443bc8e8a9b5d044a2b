@@ -1,0 +1,30 @@
+moq-transport/src/session/subscribed.rs
+  s_f3e473a86290f3::t_cfa16a8e28733f 1260-1322
+moq-transport/src/session/request_id.rs
+  s_f3e473a86290f3::t_61980a6a834d0f 80-89
+moq-transport/src/session/publisher.rs
+  s_f3e473a86290f3::t_e78d603ce7fe98 156-159,264,1139-1143,1204-1214,1479
+moq-relay-ietf/src/producer.rs
+  s_f3e473a86290f3::t_ca31e547391191 3443
+  s_f3e473a86290f3::t_15dc2601a9a60b 3440-3441
+moq-transport/src/session/fetch.rs
+  s_f3e473a86290f3::t_0d750e0667f6dc 740,742,745-804
+moq-transport/src/session/fetch_requested.rs
+  s_f3e473a86290f3::t_fd2286957b4085 40-41,137,202,238-239,253-260
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "72c4a3951058ab27741a2443bc8e8a9b5d044a2b",
+  "prompts": {},
+  "sessions": {
+    "s_f3e473a86290f3": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_ec6dc9b26ffex4HCmbxsO2bq12",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
