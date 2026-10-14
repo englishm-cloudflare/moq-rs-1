@@ -1,0 +1,48 @@
+moq-relay-ietf/src/bin/moq-relay-ietf/file_coordinator.rs
+  s_2c2086499a360a::t_b4c416ef90ecd4 14,26-27,30-31,295-296,309,312-317,748-751
+Dockerfile
+  s_2c2086499a360a::t_0549f767c29221 16-19,22
+moq-relay-ietf/src/bin/moq-relay-ietf/main.rs
+  s_2c2086499a360a::t_9abfb40c6d0c41 6,106-116,135-138,209,214-216
+moq-relay-ietf/src/bin/moq-relay-ietf/api_coordinator.rs
+  s_01a1f6dfa33eb0::t_236bda4b879f46 14,26,29-30,178-188,324-327
+  s_2c2086499a360a::t_7065c3e5370506 127-128
+moq-relay-ietf/src/bin/moq-relay-ietf/scope_config.rs
+  s_2c2086499a360a::t_5a3df0ba00042c 423-425
+  s_2c2086499a360a::t_492a8270dc4c7a 1-7,11-56,58-70,81-406,408,416-417,419-422,426-429,432-440,448-449,451-490,498-507,509,511-512,514-546,551,555-557,559-565,567-570,572-578,580-642
+  s_2c2086499a360a::t_8d79cd195dd703 550,552-554,558,566,571
+  s_2c2086499a360a::t_a5ef919c7f140d 643-1000,1007-1022,1024-1071,1073-1085,1112-1122,1124-1144,1146-1189,1191-1275,1277-1313
+  s_2c2086499a360a::t_a51ab95480fc72 8-10,57,71-80,407,409-415,418,430-431,441-447,450,492-497,508,510,579,1002-1006,1023,1072,1087-1111,1123,1145,1190,1276
+  s_2c2086499a360a::t_3f52a105186f99 513
+  s_2c2086499a360a::t_93737ce00d3307 547-549
+  s_2c2086499a360a::t_5649a2f1e28d4d 491,1001,1086
+moq-relay-ietf/README.md
+  s_2c2086499a360a::t_cfdc8df0c91b4b 57
+  s_2c2086499a360a::t_fa14499cd58e07 28-56,58-79
+moq-relay-ietf/Cargo.toml
+  s_2c2086499a360a::t_422909f9c51b3f 75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "839379b081d546ab56f6e06a75dc25cbe9f14d93",
+  "prompts": {},
+  "sessions": {
+    "s_01a1f6dfa33eb0": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_ecb3de613ffeb8XFgaol7oCGlF",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    },
+    "s_2c2086499a360a": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_ecb43cabbffeVlXs1XglGCVvfg",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
