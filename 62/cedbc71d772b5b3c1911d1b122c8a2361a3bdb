@@ -1,0 +1,21 @@
+moq-relay-ietf/src/bin/moq-relay-ietf/main.rs
+  s_2c2086499a360a::t_bc21c183ade512 107-110
+AGENTS.md
+  s_2c2086499a360a::t_4c16699a115046 104-109
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "62cedbc71d772b5b3c1911d1b122c8a2361a3bdb",
+  "prompts": {},
+  "sessions": {
+    "s_2c2086499a360a": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_ecb43cabbffeVlXs1XglGCVvfg",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
