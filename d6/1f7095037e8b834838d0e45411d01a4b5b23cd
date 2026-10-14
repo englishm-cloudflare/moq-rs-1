@@ -1,0 +1,36 @@
+moq-transport/src/session/fetch.rs
+  s_f3e473a86290f3::t_cd1e0d060ad18f 391-425,427-431
+  s_f3e473a86290f3::t_ffd057bfa9cd47 637-885
+moq-transport/src/session/publisher.rs
+  s_f3e473a86290f3::t_bdf45f90f307f3 36,38-40
+  s_f3e473a86290f3::t_9107f02b9a5219 1159,1181-1208,1218
+moq-transport/src/session/subscriber.rs
+  s_f3e473a86290f3::t_9e174187dc2647 1983-1986
+  s_f3e473a86290f3::t_0df7bc3f1e06d1 988-1019
+README.md
+  s_f3e473a86290f3::t_20a948b93821d8 26,31
+moq-relay-ietf/README.md
+  s_f3e473a86290f3::t_180d840b33cc13 27
+moq-relay-ietf/src/producer.rs
+  s_f3e473a86290f3::t_bec9d81749b36b 8,436-440,450,452,3320-3421,3423
+moq-transport/src/session/fetch_requested.rs
+  s_f3e473a86290f3::t_76af934af0bcb2 25,37-40,93-96,132,142-143,163-170,172-175,180,182-218,220-221,355-357,359-363,419-444,605,672-736
+moq-transport/src/session/subscribed.rs
+  s_f3e473a86290f3::t_c69120958bf9ee 17,29-32,56,149-152,181-183,417-423,1233-1297,1301-1305,2963-2966
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "d61f7095037e8b834838d0e45411d01a4b5b23cd",
+  "prompts": {},
+  "sessions": {
+    "s_f3e473a86290f3": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_ec6dc9b26ffex4HCmbxsO2bq12",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
