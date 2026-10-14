@@ -1,0 +1,35 @@
+README.md
+  s_f3e473a86290f3::t_a9448feb74a4bb 26,31
+moq-relay-ietf/README.md
+  s_f3e473a86290f3::t_c2b828f10b4abb 27
+moq-relay-ietf/src/consumer.rs
+  s_f3e473a86290f3::t_62a1d77c2a8d94 292-296
+moq-relay-ietf/src/lib.rs
+  s_f3e473a86290f3::t_69b7d76e0e1125 48-49
+moq-relay-ietf/src/local.rs
+  s_f3e473a86290f3::t_70229a1de93c1e 13,68-70,724-744,758-761,770-773,1073-1082,1952-1955
+moq-relay-ietf/src/producer.rs
+  s_f3e473a86290f3::t_ca31e547391191 14-15,42-46,335,410-419,427-518,1784-1808,1896-1899,2970-2974,3112-3401
+moq-relay-ietf/src/remote.rs
+  s_f3e473a86290f3::t_47d66bb765ae46 13,15,214-442,898-939,1361-1375
+moq-relay-ietf/src/test.rs
+  s_f3e473a86290f3::t_65c7c4e5a17119 1-56
+moq-transport/src/session/fetch.rs
+  s_f3e473a86290f3::t_83ad74e842bc13 294-295,302-304,306-308,359-374
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "4db16718ce4594539e331b266455ff2bcddaaa8d",
+  "prompts": {},
+  "sessions": {
+    "s_f3e473a86290f3": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_ec6dc9b26ffex4HCmbxsO2bq12",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
