@@ -1,0 +1,50 @@
+moq-relay-ietf/README.md
+  s_2c2086499a360a::t_fa14499cd58e07 28-56,58-79
+  s_2c2086499a360a::t_cfdc8df0c91b4b 57
+  s_2c2086499a360a::t_13bb44b23c97fd 25
+moq-relay-ietf/Cargo.toml
+  s_2c2086499a360a::t_422909f9c51b3f 73
+moq-relay-ietf/src/bin/moq-relay-ietf/main.rs
+  s_2c2086499a360a::t_9abfb40c6d0c41 6,102-112,131-134,205,210-212
+moq-relay-ietf/src/bin/moq-relay-ietf/scope_config.rs
+  s_2c2086499a360a::t_8d79cd195dd703 558,560-562,566,574,579
+  s_2c2086499a360a::t_492a8270dc4c7a 1-7,11-56,58-70,81-406,408,417,423-424,426-429,433-436,439-447,455-456,458-498,506-515,517,519-520,522-554,559,563-565,567-573,575-578,580-586,588-650
+  s_2c2086499a360a::t_5649a2f1e28d4d 499,1009,1094
+  s_2c2086499a360a::t_3f52a105186f99 521
+  s_2c2086499a360a::t_a5ef919c7f140d 651-1008,1015-1030,1032-1079,1081-1093,1120-1130,1132-1152,1154-1197,1199-1283,1285-1321
+  s_2c2086499a360a::t_5a3df0ba00042c 430-432
+  s_2c2086499a360a::t_93737ce00d3307 555-557
+  s_2c2086499a360a::t_a51ab95480fc72 8-10,57,71-80,407,409-415,425,437-438,448-454,457,500-505,516,518,587,1010-1014,1031,1080,1095-1119,1131,1153,1198,1284
+  s_2c2086499a360a::t_8ce9dce32b94f5 416,418-422
+moq-relay-ietf/src/bin/moq-relay-ietf/api_coordinator.rs
+  s_01a1f6dfa33eb0::t_236bda4b879f46 14,26,29-30,178-188,324-327
+  s_2c2086499a360a::t_7065c3e5370506 127-128
+moq-relay-ietf/src/bin/moq-relay-ietf/file_coordinator.rs
+  s_2c2086499a360a::t_b4c416ef90ecd4 14,26-27,30-31,295-296,309,312-317,748-751
+Dockerfile
+  s_2c2086499a360a::t_0549f767c29221 16-19,22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "be7dabf0069b418550615f3db9b2362c3ac60de2",
+  "prompts": {},
+  "sessions": {
+    "s_01a1f6dfa33eb0": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_ecb3de613ffeb8XFgaol7oCGlF",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    },
+    "s_2c2086499a360a": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_ecb43cabbffeVlXs1XglGCVvfg",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
