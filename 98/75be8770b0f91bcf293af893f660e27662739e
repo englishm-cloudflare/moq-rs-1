@@ -1,0 +1,31 @@
+moq-relay-ietf/README.md
+  s_f3e473a86290f3::t_1a790d3558c64f 27
+moq-relay-ietf/src/producer.rs
+  s_f3e473a86290f3::t_ee828121d183f2 42,434,3188
+moq-transport/src/session/fetch.rs
+  s_f3e473a86290f3::t_e391afbb7b34cf 37-38,188,205-228,253,286-288,320-327,761,870-1019
+moq-transport/src/session/fetch_requested.rs
+  s_f3e473a86290f3::t_960e240bf3308c 41,45,50-87,93-94,102,163,165-171,175-183,255-259,299,301-313,316,318,329-330,332,336,342-349,354-360,362-369,376-386,390-458,460,633-641
+moq-transport/src/session/mod.rs
+  s_f3e473a86290f3::t_6636e4559cdbae 1442,1448-1456
+moq-transport/src/session/publisher.rs
+  s_f3e473a86290f3::t_3fcece6302278a 1225
+moq-transport/src/session/subscriber.rs
+  s_f3e473a86290f3::t_2bdd4e74314272 1061-1068,1070-1072
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "9875be8770b0f91bcf293af893f660e27662739e",
+  "prompts": {},
+  "sessions": {
+    "s_f3e473a86290f3": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_ec6dc9b26ffex4HCmbxsO2bq12",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
