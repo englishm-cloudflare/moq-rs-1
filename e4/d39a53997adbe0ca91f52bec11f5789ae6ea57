@@ -1,0 +1,30 @@
+moq-cat-mint/README.md
+  s_d67af079c614d7::t_d796ef5430d427 1-52
+moq-cat-mint/src/main.rs
+  s_d67af079c614d7::t_f76be38db1b229 1-253
+  s_d67af079c614d7::t_9f520aee61d406 254-255
+Cargo.lock
+  s_d67af079c614d7::t_2aaa3b83b7ac5b 1657-1667
+Cargo.toml
+  s_d67af079c614d7::t_d21b34e023c52c 16
+REUSE.toml
+  s_d67af079c614d7::t_e7287f0da78741 44
+moq-cat-mint/Cargo.toml
+  s_d67af079c614d7::t_fae32494c153cd 1-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "e4d39a53997adbe0ca91f52bec11f5789ae6ea57",
+  "prompts": {},
+  "sessions": {
+    "s_d67af079c614d7": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_ebf06df1effecI8HjWDxIALXoC",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
