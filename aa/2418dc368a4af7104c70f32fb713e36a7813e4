@@ -1,0 +1,45 @@
+moq-cat-mint/Cargo.toml
+  s_d67af079c614d7::t_fae32494c153cd 1-25
+Cargo.toml
+  s_d67af079c614d7::t_d21b34e023c52c 16
+dev/README.md
+  s_2c2086499a360a::t_f4a19cfc1bf32f 86
+REUSE.toml
+  s_d67af079c614d7::t_e7287f0da78741 44
+moq-cat-mint/src/main.rs
+  s_d67af079c614d7::t_f76be38db1b229 1-142,150-151,156-175,179-182,184-186,189-262
+  s_d67af079c614d7::t_33846f70cba00e 176-178,183,187-188
+  s_d67af079c614d7::t_aa3cfd483598a8 143-149
+  s_d67af079c614d7::t_9f520aee61d406 263-264
+  s_d67af079c614d7::t_081d7cfe1d5f2e 152-155
+Cargo.lock
+  s_d67af079c614d7::t_2aaa3b83b7ac5b 1657-1667
+moq-cat-mint/README.md
+  s_d67af079c614d7::t_d796ef5430d427 1-52
+README.md
+  s_d67af079c614d7::t_9fccfbc7fa1799 59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "aa2418dc368a4af7104c70f32fb713e36a7813e4",
+  "prompts": {},
+  "sessions": {
+    "s_2c2086499a360a": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_ecb43cabbffeVlXs1XglGCVvfg",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    },
+    "s_d67af079c614d7": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_ebf06df1effecI8HjWDxIALXoC",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": null
+    }
+  }
+}
