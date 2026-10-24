@@ -1,0 +1,21 @@
+docs/draft-18-main-reconciliation.md
+  s_29772c741667b7::t_c575c0d002a560 39
+deploy/MLOG_SETUP.md
+  s_29772c741667b7::t_25e49e5695ccb8 11-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "c8fe2c48857fbbb34cf0e576caad3009de80eb0c",
+  "prompts": {},
+  "sessions": {
+    "s_29772c741667b7": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_e9122e1e7ffeiA2UomttJnGnM7",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
