@@ -1,0 +1,19 @@
+release-plz.toml
+  s_8e6c7d84627ed3::t_2ef8aa3f0917d8 4-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "950a87b826799405c5a881e2be04fbe97be9419a",
+  "prompts": {},
+  "sessions": {
+    "s_8e6c7d84627ed3": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_e7c3325bcffeibHC5q6nJukUHI",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
