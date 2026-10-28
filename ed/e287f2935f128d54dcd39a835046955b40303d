@@ -1,0 +1,19 @@
+deploy/MLOG_SETUP.md
+  s_8e6c7d84627ed3::t_0fbb0b9d70ea96 38-40,42,182-184,188,191,320,323
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "ede287f2935f128d54dcd39a835046955b40303d",
+  "prompts": {},
+  "sessions": {
+    "s_8e6c7d84627ed3": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_e7c3325bcffeibHC5q6nJukUHI",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
