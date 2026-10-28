@@ -1,0 +1,28 @@
+docs/draft-18-main-reconciliation.md
+  s_8e6c7d84627ed3::t_06cb25a6b21a8b 92-93
+README.md
+  s_8e6c7d84627ed3::t_06cb25a6b21a8b 26-27,33
+moq-transport/src/session/publisher.rs
+  s_8e6c7d84627ed3::t_06cb25a6b21a8b 678-681,716-754,757,761-762,764-768,771-784,788-789,791-797,853-863
+  s_8e6c7d84627ed3::t_89d7d81ec5c5ec 864-865
+moq-transport/src/session/dynamic_groups.rs
+  s_8e6c7d84627ed3::t_74110b7f261db0 51-93,99-102,109-111,311-315,321,326-329,336,340-347,356-358,363-364,369-371,375-382,388-390,398-410,416-418,428,436-446,461-466,478-484,490-491,496-500,504
+  s_8e6c7d84627ed3::t_7af7c434138b40 94-98,103-108,316-320,322-325,330-335,337-339,348-355,359-362,365-368,372-374,383-387,391-397,411-415,419-427,429-435,447-460,467-477,485-489,492-495,501-503
+  s_8e6c7d84627ed3::t_7c805989f575c9 505
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "e69b81b53ee19e059dff44d76eca9dffa92e53df",
+  "prompts": {},
+  "sessions": {
+    "s_8e6c7d84627ed3": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_e7c3325bcffeibHC5q6nJukUHI",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
