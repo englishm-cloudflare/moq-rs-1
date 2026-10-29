@@ -1,0 +1,52 @@
+moq-clock-ietf/src/main.rs
+  s_d645426f30c85b::t_72d804e925072c 11-12
+  s_9c4da4cfa2e001::t_3fb563771096ba 10,94-99,105,129-138
+moq-transport/src/lib.rs
+  s_d645426f30c85b::t_b20765edad728f 11-67
+moq-clock-ietf/src/clock.rs
+  s_d645426f30c85b::t_b4e59fc9869787 61-66,159-162,173-175,177-186,218-251,253-285,287-295,309-310,384-458
+  s_d645426f30c85b::t_a731a2a767d4af 296-297
+  s_d645426f30c85b::t_72d804e925072c 163-171,176,187-191,252,286,303
+  s_d645426f30c85b::t_18ffe145c15f03 172,192-217
+  s_d645426f30c85b::t_706d12201048a4 10,12,19,23,27,35,59-60,95,106,111-113,115,118,121-122,124,128,140,298-302,304-308,311-315,459-476
+moq-clock-ietf/src/cli.rs
+  s_d645426f30c85b::t_c9d84b73dea81e 139-145,149-152,154-159
+  s_d645426f30c85b::t_b20765edad728f 136-138,146-148,153,160-161
+  s_d645426f30c85b::t_8bbbf3a326b562 74-81
+moq-clock-ietf/src/test.rs
+  s_d645426f30c85b::t_72d804e925072c 1-11,13-32,34-39,41-46,48,50-73,75-89,91-110,112-126,128-137,139-179,181-206,208-213,215-229,231-246
+  s_d645426f30c85b::t_b38cc8804af326 49
+  s_9c4da4cfa2e001::t_3f7d7bb250430f 12,33,40,47,74,90,111,127,138,180,207,214,230
+moq-clock-ietf/src/history.rs
+  s_d645426f30c85b::t_b4e59fc9869787 1-329
+moq-clock-ietf/Cargo.toml
+  s_d645426f30c85b::t_72d804e925072c 38-43
+moq-clock-ietf/README.md
+  s_d645426f30c85b::t_b20765edad728f 1-62
+Cargo.lock
+  s_d645426f30c85b::t_b97b6dc0cf900f 1688,1693,1695-1696
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "bc8e3007d41f1b92498e712d87c5913d609e6109",
+  "prompts": {},
+  "sessions": {
+    "s_9c4da4cfa2e001": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_e770d4329ffeYaW5yuWV0724rc",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    },
+    "s_d645426f30c85b": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_e770d4355ffeJ9lkBkRkhG5hto",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
