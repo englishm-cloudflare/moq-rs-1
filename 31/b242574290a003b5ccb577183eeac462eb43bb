@@ -1,0 +1,59 @@
+Cargo.lock
+  s_7ae875c5bbf597::t_4463cfe5ae3f84 1827-1828
+Cargo.toml
+  s_7ae875c5bbf597::t_2b444ab8e13021 21
+moq-native-ietf/src/quic.rs
+  s_7ae875c5bbf597::t_ec62769b360b97 20
+moq-relay-ietf/src/consumer.rs
+  s_7ae875c5bbf597::t_eaf5967e5cb62a 714
+moq-relay-ietf/src/producer.rs
+  s_7ae875c5bbf597::t_da67a02fed336c 1900
+moq-relay-ietf/src/relay.rs
+  s_7ae875c5bbf597::t_2eebdf2df41cb7 10
+moq-test-client/src/moqtest.rs
+  s_7ae875c5bbf597::t_10ea3145372d37 60
+moq-test-client/src/scenarios.rs
+  s_7ae875c5bbf597::t_15f0ba6de8eb40 17
+moq-transport/Cargo.toml
+  s_7ae875c5bbf597::t_058c9d9bad1ee6 28-29,37-45
+moq-transport/src/session/error.rs
+  s_7ae875c5bbf597::t_4773e2586da6b1 5,108-110,115-117,120-126,177-182,224,245
+moq-transport/src/session/fetch.rs
+  s_7ae875c5bbf597::t_cbe3a08c0eeedc 18
+moq-transport/src/session/fetch_requested.rs
+  s_7ae875c5bbf597::t_1cb1346fa28beb 31
+moq-transport/src/session/mod.rs
+  s_7ae875c5bbf597::t_49ae8654bedda0 27-31,57,2059
+moq-transport/src/session/publisher.rs
+  s_7ae875c5bbf597::t_a4e3915baec3f6 15,1854
+moq-transport/src/session/reader.rs
+  s_7ae875c5bbf597::t_5490499d21e7c5 12
+moq-transport/src/session/subscribed.rs
+  s_7ae875c5bbf597::t_6ecae2ba186a86 12-13,837-840,2010,2015-2017,2047-2055
+moq-transport/src/session/subscriber.rs
+  s_7ae875c5bbf597::t_5d9cf2e756a220 18
+moq-transport/src/session/transport.rs
+  s_7ae875c5bbf597::t_f751cf51561957 1-412
+moq-transport/src/session/transport/tests.rs
+  s_7ae875c5bbf597::t_ace7f123d0119c 1-548
+moq-transport/src/session/transport_wasm.rs
+  s_7ae875c5bbf597::t_95cfd103ae3360 1-10
+moq-transport/src/session/writer.rs
+  s_7ae875c5bbf597::t_9dfb79087fb64d 9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "31b242574290a003b5ccb577183eeac462eb43bb",
+  "prompts": {},
+  "sessions": {
+    "s_7ae875c5bbf597": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_e770d430effetDXKTX6L1TUfl3",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
