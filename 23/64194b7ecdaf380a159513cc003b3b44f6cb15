@@ -1,0 +1,23 @@
+AGENTS.md
+  s_7ae875c5bbf597::t_6edcf8dbf7d19e 46-51
+moq-native-ietf/src/lib.rs
+  s_7ae875c5bbf597::t_6edcf8dbf7d19e 9-15
+moq-native-ietf/tests/client.rs
+  s_7ae875c5bbf597::t_6edcf8dbf7d19e 15-20,32-43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "2364194b7ecdaf380a159513cc003b3b44f6cb15",
+  "prompts": {},
+  "sessions": {
+    "s_7ae875c5bbf597": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_e770d430effetDXKTX6L1TUfl3",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
