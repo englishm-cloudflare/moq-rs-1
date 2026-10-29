@@ -1,0 +1,23 @@
+moq-transport/src/lib.rs
+  s_03e128bee25042::t_a1ec01e8e5999a 18
+moq-relay-ietf/src/lib.rs
+  s_03e128bee25042::t_a1ec01e8e5999a 67-68
+deploy/MLOG_SETUP.md
+  s_03e128bee25042::t_a1ec01e8e5999a 91-95
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "424fb88d3e88a11e6148cfe8fed8c4f8c62fa767",
+  "prompts": {},
+  "sessions": {
+    "s_03e128bee25042": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_e770d4365ffePitfLNe5XhCxLE",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
