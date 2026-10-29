@@ -1,0 +1,23 @@
+moq-transport/src/serve/subgroup.rs
+  s_bbd2a3ad8e63ee::t_c6ce2529ebde7c 1246-1249
+  s_bbd2a3ad8e63ee::t_ec965ad863e731 1213-1217,1220-1245,1250-1355
+  s_bbd2a3ad8e63ee::t_97db85a291e48f 1218-1219
+moq-transport/src/watch/queue.rs
+  s_bbd2a3ad8e63ee::t_ec965ad863e731 120-164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "6f219e14478eed1713c34be12bd341aeadb9326d",
+  "prompts": {},
+  "sessions": {
+    "s_bbd2a3ad8e63ee": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_e770d433bffeM57Rf16GSo9kkl",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
