@@ -1,0 +1,32 @@
+moq-relay-ietf/README.md
+  s_bbd2a3ad8e63ee::t_1779bfc31efce4 1,4,8,11,13,15-29
+dev/README.md
+  s_bbd2a3ad8e63ee::t_1779bfc31efce4 6,8-10,21,23,34,40,51,57
+README.md
+  s_bbd2a3ad8e63ee::t_1779bfc31efce4 9-11,16-17,27,78-84,95
+  s_d645426f30c85b::t_691d164a45b649 41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "15c275ebd8e20b9a4a962b34462137ac0ba429a3",
+  "prompts": {},
+  "sessions": {
+    "s_bbd2a3ad8e63ee": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_e770d433bffeM57Rf16GSo9kkl",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    },
+    "s_d645426f30c85b": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_e770d4355ffeJ9lkBkRkhG5hto",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
