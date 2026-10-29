@@ -1,45 +1,89 @@
 Cargo.lock
   s_7ae875c5bbf597::t_4463cfe5ae3f84 1827-1828
+  s_72a526663f36ab::t_45d0e5211c3352 1827-1828
 Cargo.toml
   s_7ae875c5bbf597::t_2b444ab8e13021 21
+  s_72a526663f36ab::t_29786ef2d5b2f6 21
 moq-native-ietf/src/quic.rs
   s_7ae875c5bbf597::t_ec62769b360b97 20
+  s_72a526663f36ab::t_29786ef2d5b2f6 20
 moq-relay-ietf/src/consumer.rs
   s_7ae875c5bbf597::t_eaf5967e5cb62a 714
+  s_72a526663f36ab::t_bfc25b7b0703a5 714
 moq-relay-ietf/src/producer.rs
   s_7ae875c5bbf597::t_da67a02fed336c 1900
+  s_72a526663f36ab::t_49a94cf55f5dcf 1900
 moq-relay-ietf/src/relay.rs
   s_7ae875c5bbf597::t_2eebdf2df41cb7 10
+  s_72a526663f36ab::t_29786ef2d5b2f6 10
 moq-test-client/src/moqtest.rs
   s_7ae875c5bbf597::t_10ea3145372d37 60
+  s_72a526663f36ab::t_4f77b542fc657f 60
 moq-test-client/src/scenarios.rs
   s_7ae875c5bbf597::t_15f0ba6de8eb40 17
+  s_72a526663f36ab::t_d8e9707a10eb28 17
 moq-transport/Cargo.toml
   s_7ae875c5bbf597::t_058c9d9bad1ee6 28-29,37-45
+  s_72a526663f36ab::t_0f7aa60df279bc 42-44
+  s_72a526663f36ab::t_29786ef2d5b2f6 28-29,37-41,45
 moq-transport/src/session/error.rs
   s_7ae875c5bbf597::t_4773e2586da6b1 5,108-110,115-117,120-126,177-182,224,245
+  s_72a526663f36ab::t_4cf48ffba0cc75 126,178-182,224,245
+  s_72a526663f36ab::t_bfd18e619c5924 108-110,115-117
+  s_72a526663f36ab::t_3664035c74d3b0 121-125
+  s_72a526663f36ab::t_0f7aa60df279bc 120,177
+  s_72a526663f36ab::t_29786ef2d5b2f6 5
 moq-transport/src/session/fetch.rs
   s_7ae875c5bbf597::t_cbe3a08c0eeedc 18
+  s_72a526663f36ab::t_d8e9707a10eb28 18
 moq-transport/src/session/fetch_requested.rs
   s_7ae875c5bbf597::t_1cb1346fa28beb 31
+  s_72a526663f36ab::t_d8e9707a10eb28 31
 moq-transport/src/session/mod.rs
   s_7ae875c5bbf597::t_49ae8654bedda0 27-31,57,2059
+  s_72a526663f36ab::t_3664035c74d3b0 57
+  s_72a526663f36ab::t_0f7aa60df279bc 27-30
+  s_72a526663f36ab::t_29786ef2d5b2f6 31,2059
 moq-transport/src/session/publisher.rs
   s_7ae875c5bbf597::t_a4e3915baec3f6 15,1854
+  s_72a526663f36ab::t_d8e9707a10eb28 15
+  s_72a526663f36ab::t_3664035c74d3b0 1854
 moq-transport/src/session/reader.rs
   s_7ae875c5bbf597::t_5490499d21e7c5 12
+  s_72a526663f36ab::t_29786ef2d5b2f6 12
 moq-transport/src/session/subscribed.rs
   s_7ae875c5bbf597::t_6ecae2ba186a86 12-13,837-840,2010,2015-2017,2047-2055
+  s_72a526663f36ab::t_bfd18e619c5924 837,839-840
+  s_72a526663f36ab::t_1e1bf2b2801f89 2010,2015-2017,2047-2055
+  s_72a526663f36ab::t_968cf19a555161 12
+  s_72a526663f36ab::t_d8e9707a10eb28 13
+  s_72a526663f36ab::t_29786ef2d5b2f6 838
 moq-transport/src/session/subscriber.rs
   s_7ae875c5bbf597::t_5d9cf2e756a220 18
+  s_72a526663f36ab::t_d8e9707a10eb28 18
 moq-transport/src/session/transport.rs
   s_7ae875c5bbf597::t_f751cf51561957 1-412
+  s_72a526663f36ab::t_298e992ab0da98 59-62,387-391,410-412
+  s_72a526663f36ab::t_1a728eba6c1df5 63-64,114,129,317-324
+  s_72a526663f36ab::t_0f7aa60df279bc 30,32
+  s_72a526663f36ab::t_3664035c74d3b0 154-159,164-165,172-177,182-183,197-205,226-264,286-291,293-295,311-313,335-343,365-367,378-380,384-386,406-408
+  s_72a526663f36ab::t_29786ef2d5b2f6 1-29,31,33-49,55-58,65-113,115-128,130-153,160-163,166-171,178-181,184-196,206-225,265-285,292,296-310,314-316,325-334,344-364,368-377,381-383,392-405,409
+  s_72a526663f36ab::t_4cf48ffba0cc75 50-54
 moq-transport/src/session/transport/tests.rs
   s_7ae875c5bbf597::t_ace7f123d0119c 1-548
+  s_72a526663f36ab::t_e0217e05adf741 404-408,412-416,425-436,439-447,471-473
+  s_72a526663f36ab::t_f72bfb364ec4aa 1-3,11-12,15-27,32-33,38-42,49-64,83-87,99-117,126,130-138,143-147,154-162,166-172,183-205,213-214,222-250,254-256,260-265,269,279-300,305-313,317-336,375-377,477-483,487-511,523,528,532,536-537,542-543,547-548
+  s_72a526663f36ab::t_3664035c74d3b0 6-7,13,28-31,34-37,43-48,88-98,118-125,127-129,139-142,148-153,163-165,173-182,206-212,215-221,251-253,257-259,266-268,270-278,301-304,314-316,484-486,512-522,524-527,529-531,533-535,538-541,544-546
+  s_72a526663f36ab::t_afd208b6b351cb 4-5,8-10
+  s_72a526663f36ab::t_d8e9707a10eb28 14
+  s_72a526663f36ab::t_c2865d1e8ce25f 65-82,337-374
+  s_72a526663f36ab::t_1a728eba6c1df5 378-403,409-411,417-424,437-438,448-470,474-476
 moq-transport/src/session/transport_wasm.rs
   s_7ae875c5bbf597::t_95cfd103ae3360 1-10
+  s_72a526663f36ab::t_0f7aa60df279bc 1-10
 moq-transport/src/session/writer.rs
   s_7ae875c5bbf597::t_9dfb79087fb64d 9
+  s_72a526663f36ab::t_29786ef2d5b2f6 9
 ---
 {
   "schema_version": "authorship/3.0.0",
@@ -47,6 +91,14 @@ moq-transport/src/session/writer.rs
   "base_commit_sha": "31b242574290a003b5ccb577183eeac462eb43bb",
   "prompts": {},
   "sessions": {
+    "s_72a526663f36ab": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_e80e33a85ffeJEG6gsylDEQ1Vq",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    },
     "s_7ae875c5bbf597": {
       "agent_id": {
         "tool": "opencode",
