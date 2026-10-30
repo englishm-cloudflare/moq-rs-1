@@ -1,0 +1,30 @@
+moq-sub/src/media.rs
+  s_9d0b0b046db6a2::t_a0043c8d0af1b4 183-193,198-202,217-233,336-372,377-391
+  s_9d0b0b046db6a2::t_b16854162c4d51 195-197,373-376
+  s_9d0b0b046db6a2::t_acd7019dcf17d0 335
+  s_bf06f2e90fb5f2::t_e9fca988cd6e1b 392
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "80586f0d8e408666f8ad0bd908e2d7a9744c29d5",
+  "prompts": {},
+  "sessions": {
+    "s_9d0b0b046db6a2": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_e72204965ffeMYYzOEANw5KC1e",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    },
+    "s_bf06f2e90fb5f2": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_e72163061ffesXoPV1AcgFGTPs",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
