@@ -1,0 +1,19 @@
+moq-relay-ietf/src/producer.rs
+  s_2940ef396ac119::t_1de1897f410db6 1090-1091,1096
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "c18c9dcc6f439e6ab47a04421db3973582d37eb0",
+  "prompts": {},
+  "sessions": {
+    "s_2940ef396ac119": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_e7560cc79ffemoCDT6JsS5J7Kg",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
