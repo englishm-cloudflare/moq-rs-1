@@ -1,0 +1,26 @@
+moq-transport/src/session/subgroup_lifecycle.rs
+  s_2940ef396ac119::t_557fd3adb2d6bd 425-428
+  s_2940ef396ac119::t_f66ffc56c77125 12-15,29-40,62-64,72-73,85,111,113-123,332,334-342,345-348,354-355,363-378,389-391,400-402,418,430-434,438-442,444-447
+  s_2940ef396ac119::t_d33ef04fba63f2 74-84,86-99,101-103,343-344,356-362,392-399,419-421,435-437
+  s_2940ef396ac119::t_7f31bab2c7c07c 333,349-353,379-388,403-417,422-424,429,443,448-459
+moq-transport/src/session/subscribed.rs
+  s_2940ef396ac119::t_6ce38ae0d53679 749-753,759-766
+  s_2940ef396ac119::t_d33ef04fba63f2 2632-2633
+  s_2940ef396ac119::t_2416928a7156fe 25-27,735,792-802,808,832,844,901-903,2454,2551
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "8180ea1554674f1208106fe76f03fa3271f1b8af",
+  "prompts": {},
+  "sessions": {
+    "s_2940ef396ac119": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_e7560cc79ffemoCDT6JsS5J7Kg",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
