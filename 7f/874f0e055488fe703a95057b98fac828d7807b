@@ -1,0 +1,63 @@
+AGENTS.md
+  s_36bbac77459560::t_e929e271c1f28d 46-51
+Cargo.lock
+  s_36bbac77459560::t_c6640ec0d8dc91 1827-1828
+Cargo.toml
+  s_36bbac77459560::t_cd2a082bd3f320 21
+moq-native-ietf/src/quic.rs
+  s_36bbac77459560::t_fc07459450b639 20
+moq-relay-ietf/src/consumer.rs
+  s_36bbac77459560::t_94d09a6d462cc2 714
+moq-relay-ietf/src/producer.rs
+  s_36bbac77459560::t_3278b65e8381dc 1900
+moq-relay-ietf/src/relay.rs
+  s_36bbac77459560::t_66f23e95bc4cde 10
+moq-test-client/src/moqtest.rs
+  s_36bbac77459560::t_e28c7491583c83 60
+moq-test-client/src/scenarios.rs
+  s_36bbac77459560::t_9f5a99277b476a 17
+moq-transport/Cargo.toml
+  s_36bbac77459560::t_d9eb2c6e931b41 28-29,37-45
+moq-transport/src/lib.rs
+  s_36bbac77459560::t_90ded140652f66 18,20
+moq-transport/src/session/error.rs
+  s_36bbac77459560::t_bb56db3dfdfa6e 5,108-110,115-117,120-126,177-182,224,245
+moq-transport/src/session/fetch.rs
+  s_36bbac77459560::t_1db667c065cc93 18
+moq-transport/src/session/fetch_requested.rs
+  s_36bbac77459560::t_6387f9d46376b2 31
+moq-transport/src/session/mod.rs
+  s_36bbac77459560::t_cf970ae929ecc0 27-31,57,2059
+moq-transport/src/session/publisher.rs
+  s_36bbac77459560::t_403de85519f389 15,1883
+moq-transport/src/session/reader.rs
+  s_36bbac77459560::t_7be206d6dd10c7 12
+moq-transport/src/session/subscribed.rs
+  s_36bbac77459560::t_55b71a1f208150 12-13,837-840,2010,2015-2017,2047-2055
+moq-transport/src/session/subscriber.rs
+  s_36bbac77459560::t_06626e30a46513 18
+moq-transport/src/session/transport.rs
+  s_36bbac77459560::t_cb885b2e078b02 1-412
+moq-transport/src/session/transport/tests.rs
+  s_36bbac77459560::t_bac9a7cd07236a 1-548
+moq-transport/src/session/transport_wasm.rs
+  s_36bbac77459560::t_8c1c95ee311966 1-10
+moq-transport/src/session/writer.rs
+  s_36bbac77459560::t_0e4dee751cd72a 9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "7f874f0e055488fe703a95057b98fac828d7807b",
+  "prompts": {},
+  "sessions": {
+    "s_36bbac77459560": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_e729ba36dffeRgHCmooJN1ZDNI",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
