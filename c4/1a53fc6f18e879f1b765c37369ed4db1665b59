@@ -1,0 +1,19 @@
+moq-sub/src/lib.rs
+  s_9d0b0b046db6a2::t_a0043c8d0af1b4 7-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "c41a53fc6f18e879f1b765c37369ed4db1665b59",
+  "prompts": {},
+  "sessions": {
+    "s_9d0b0b046db6a2": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_e72204965ffeMYYzOEANw5KC1e",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
