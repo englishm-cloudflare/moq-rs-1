@@ -1,0 +1,19 @@
+moqt/SNAPSHOT.json
+  s_1c9ce7e39414df::t_78dfeef507fd7f 1177-1178
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "b0c76fb5171176fe25ec1ad4347a89cf9388be3e",
+  "prompts": {},
+  "sessions": {
+    "s_1c9ce7e39414df": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_e7585dbc6ffezBcYyCUVjYDJQk",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
