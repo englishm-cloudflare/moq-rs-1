@@ -1,0 +1,23 @@
+moq-pub/tests/fetch.rs
+  s_9d0b0b046db6a2::t_0d5c8542ff5d0f 16-19,21,145,209-211,225-245,248-252,277,282-287,292-298
+moq-sub/src/fetch.rs
+  s_9d0b0b046db6a2::t_0d5c8542ff5d0f 23-24,159-161,163,168-169,374,379-381,383-384,386-437
+moq-sub/README.md
+  s_9d0b0b046db6a2::t_0d5c8542ff5d0f 42-51,62-64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "130878b02bbfc08cd7d17c579074997fd7492ec3",
+  "prompts": {},
+  "sessions": {
+    "s_9d0b0b046db6a2": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_e72204965ffeMYYzOEANw5KC1e",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
