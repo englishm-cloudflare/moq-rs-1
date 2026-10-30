@@ -1,0 +1,19 @@
+moq-clock-ietf/src/test.rs
+  s_c5e2103e7332fa::t_a1340ceb12ec73 48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "ffa62e50faa8d82cacd0bbf11de3a1f28fa33f08",
+  "prompts": {},
+  "sessions": {
+    "s_c5e2103e7332fa": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_e7585dba9ffeFs6aBK2t7bI2c8",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
