@@ -1,0 +1,28 @@
+moq-relay-ietf/src/test.rs
+  s_03e128bee25042::t_cac5831e8f0f61 10-41
+moq-relay-ietf/src/auth/session.rs
+  s_03e128bee25042::t_cac5831e8f0f61 66-74,89-96
+  s_03e128bee25042::t_2949238448cbb8 156-159,178-186,190,193,218-230,234,237-238,247-249
+  s_03e128bee25042::t_895f5ea223247d 160-177,187-189,191-192,194-217,231-233,235-236,239-246
+moq-relay-ietf/src/relay.rs
+  s_03e128bee25042::t_2949238448cbb8 950-957,961,970,980-982,1206,1211
+  s_03e128bee25042::t_895f5ea223247d 958-960,962-969,971-979,1209-1210,1212-1213,1215-1222
+  s_03e128bee25042::t_cac5831e8f0f61 131-132,165-166,182-183,198-201,209-212,673-674
+  s_03e128bee25042::t_f34b7a6e596907 949
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "4456bf3915abe4ea26d72aaf97e4132a8abe8f10",
+  "prompts": {},
+  "sessions": {
+    "s_03e128bee25042": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_e770d4365ffePitfLNe5XhCxLE",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
