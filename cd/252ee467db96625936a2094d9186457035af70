@@ -1,0 +1,19 @@
+moq-transport/src/session/writer.rs
+  s_2940ef396ac119::t_f947d9101436b4 19-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "cd252ee467db96625936a2094d9186457035af70",
+  "prompts": {},
+  "sessions": {
+    "s_2940ef396ac119": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_e7560cc79ffemoCDT6JsS5J7Kg",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
