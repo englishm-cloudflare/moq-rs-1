@@ -1,0 +1,20 @@
+moq-transport/src/session/fetch.rs
+  s_14558542efd246::t_8b3d625783d996 303,311-312,316-319,375-421
+  s_14558542efd246::t_d069db193357b5 422
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "2b96d764e61c16265c5870b9fe1587ac0d8d7b67",
+  "prompts": {},
+  "sessions": {
+    "s_14558542efd246": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_e628e107fffetBvC3GJfibP8nU",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Mike English <menglish@cloudflare.com>"
+    }
+  }
+}
